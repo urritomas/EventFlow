@@ -650,35 +650,43 @@ export default function HiringDetailsPage() {
           </div>
         </section>
 
-        <section className="mx-auto mt-6 max-w-7xl border-t border-white/10 px-4 pb-16 pt-10 sm:px-6">
+        <section className="mx-auto mt-6 w-full max-w-6xl border-t border-white/10 px-4 pb-16 pt-12 sm:px-6">
           <div
-            className={`glass mx-auto max-w-xl rounded-2xl p-8 text-center ${revealClass('submit')}`}
+            className={`glass mx-auto w-full max-w-5xl rounded-[2rem] p-6 sm:p-8 lg:p-10 ${revealClass('submit')}`}
             ref={setSectionRef('submit')}
             data-reveal-key="submit"
           >
-            <h3 className="text-2xl font-bold text-on-background">Request Deployment</h3>
-            <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
-              Response time: within 24 hours. Enterprise onboarding required. Secure submission.
-            </p>
-            <button
-              type="button"
-              onClick={() => setRequestSubmitted(true)}
-              className="mt-5 inline-flex w-full min-h-[52px] items-center justify-center rounded-xl bg-gradient-to-r from-surface-tint to-brand-deep px-6 py-4 text-base font-semibold text-on-secondary shadow-[0_0_24px_rgba(81,153,245,0.35)] transition hover:brightness-110 active:scale-[0.99]"
-            >
-              Submit Hiring Request
-            </button>
-            <a
-              href="#"
-              className="mt-4 inline-block text-sm text-surface-tint/90 underline-offset-4 transition hover:text-surface-tint hover:underline"
-              onClick={(e) => e.preventDefault()}
-            >
-              Download request summary (PDF mock)
-            </a>
-            {requestSubmitted ? (
-              <p className="mt-5 text-center text-sm font-medium leading-relaxed text-emerald-300">
-                Your request has been received. Our EventFlow team will contact you within 24 hours.
-              </p>
-            ) : null}
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:items-center">
+              <div className="max-w-2xl text-center lg:text-left">
+                <p className="label-caps text-surface-tint/90">Enterprise onboarding</p>
+                <h3 className="mt-3 text-3xl font-bold text-on-background sm:text-4xl">Request Deployment</h3>
+                <p className="mt-4 text-sm leading-relaxed text-on-surface-variant sm:text-base">
+                  Response time: within 24 hours. Enterprise onboarding required. Secure submission.
+                </p>
+              </div>
+
+              <div className="flex h-full flex-col justify-center rounded-[1.5rem] border border-white/6 bg-white/3 p-5 sm:p-6">
+                <button
+                  type="button"
+                  onClick={() => setRequestSubmitted(true)}
+                  className="inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-gradient-to-r from-surface-tint to-brand-deep px-6 py-4 text-base font-semibold text-on-secondary shadow-[0_0_24px_rgba(81,153,245,0.35)] transition hover:brightness-110 active:scale-[0.99]"
+                >
+                  Submit Hiring Request
+                </button>
+                <a
+                  href="#"
+                  className="mt-4 inline-block text-center text-sm text-surface-tint/90 underline-offset-4 transition hover:text-surface-tint hover:underline"
+                  onClick={(e) => e.preventDefault()}
+                >
+                  Download request summary (PDF mock)
+                </a>
+                {requestSubmitted ? (
+                  <p className="mt-5 text-center text-sm font-medium leading-relaxed text-emerald-300">
+                    Your request has been received. Our EventFlow team will contact you within 24 hours.
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
         </section>
       </main>
