@@ -147,7 +147,7 @@ export function HomePage() {
                   />
                   <div className="absolute bottom-6 left-6 z-[2] flex items-center gap-2 rounded-full border border-emerald-400/25 bg-slate-950/80 px-4 py-2 text-xs text-emerald-100/90 backdrop-blur-md">
                     <CheckCircle2 className="size-4 text-emerald-400" aria-hidden />
-                    <span>Live status · 98% verified</span>
+                    <span>Live status</span>
                   </div>
                 </div>
               </div>
@@ -193,25 +193,6 @@ export function HomePage() {
             <FeatureCard icon={Printer} title="Auto certificates" visual={<CertProgress />}>
               Branded credentials and attendance proofs generated automatically as participants clear checkpoints.
             </FeatureCard>
-          </div>
-        </section>
-
-        <section
-          data-reveal-key="lp-stats"
-          className={`border-y border-white/5 bg-surface-container-low/40 py-16 ${revealClass("lp-stats")}`}
-        >
-          <div className="mx-auto grid max-w-6xl grid-cols-2 gap-10 px-4 sm:grid-cols-4 sm:px-6">
-            {[
-              ["99.9%", "Accuracy rate"],
-              ["500k+", "Check-ins / mo"],
-              ["<0.5s", "Verify speed"],
-              ["24/7", "Global support"],
-            ].map(([n, l]) => (
-              <div key={l} className="text-center">
-                <p className="font-heading text-3xl font-bold text-surface-tint sm:text-4xl">{n}</p>
-                <p className="mt-2 label-caps text-on-surface-variant">{l}</p>
-              </div>
-            ))}
           </div>
         </section>
 
