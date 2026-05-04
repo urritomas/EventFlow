@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import Link from 'next/link';
 
 export default function LandingPage() {
   return (
@@ -9,7 +10,7 @@ export default function LandingPage() {
       </div>
       <header className="sticky top-0 backdrop-blur-md border-b border-white/6 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <a href="/" className="text-2xl font-bold highlight hover:opacity-85 transition">EventFlow</a>
+          <Link href="/" className="text-2xl font-bold highlight hover:opacity-85 transition">EventFlow</Link>
           <nav className="flex gap-8 items-center"> 
             <a className="muted text-sm hover:accent transition" href="#features">Features</a>
             <a className="muted text-sm hover:accent transition" href="#how">How it works</a>
@@ -147,8 +148,10 @@ export default function LandingPage() {
         </section>
 
         <section id="contact" className="max-w-4xl mx-auto px-6 py-20 text-center">
-          <h3 className="text-4xl font-bold mb-4">Let's Talk</h3>
-          <p className="muted mb-8 text-lg leading-relaxed">Tell us about your event and let's discuss how EventFlow can streamline operations and enhance security.</p>
+          <h3 className="text-4xl font-bold mb-4">Let&apos;s Talk</h3>
+          <p className="muted mb-8 text-lg leading-relaxed">
+            Tell us about your event and let&apos;s discuss how EventFlow can streamline operations and enhance security.
+          </p>
           <div className="flex gap-4 justify-center">
             <a className="btn-primary" href="mailto:sales@eventflow.com">Email us</a>
             <a className="glass px-6 py-3 muted" href="tel:+1234567890">Call us</a>

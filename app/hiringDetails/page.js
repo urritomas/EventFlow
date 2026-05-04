@@ -1,6 +1,8 @@
 'use client';
 
+/* eslint-disable react-hooks/refs -- callback refs register section nodes for IntersectionObserver */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 
 const roleOptions = ['Security', 'Check-in Staff', 'Supervisors', 'Technical Staff'];
 const technologyOptions = [
@@ -34,6 +36,7 @@ export default function HiringDetailsPage() {
   const sectionRefs = useRef({});
   const [visibleSections, setVisibleSections] = useState({});
   const [activeOverviewTab, setActiveOverviewTab] = useState('event');
+  const [requestSubmitted, setRequestSubmitted] = useState(false);
 
   const [form, setForm] = useState({
     eventName: '',
@@ -138,8 +141,8 @@ export default function HiringDetailsPage() {
         });
       },
       {
-        threshold: 0.16,
-        rootMargin: '0px 0px -10% 0px',
+        threshold: 0.1,
+        rootMargin: '0px 0px -6% 0px',
       }
     );
 
@@ -160,7 +163,7 @@ export default function HiringDetailsPage() {
   };
 
   const inputClass =
-    'w-full px-4 py-3 bg-white/5 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500/40 transition text-sm';
+    'w-full rounded-lg border border-white/10 bg-surface-container-highest/50 px-4 py-3 text-sm text-on-background transition placeholder:text-on-surface-variant/45 focus:outline-none focus:ring-2 focus:ring-surface-tint/35';
 
   return (
     <div style={{ background: 'var(--background)', color: 'var(--foreground)' }} className="relative overflow-hidden">
@@ -193,38 +196,35 @@ export default function HiringDetailsPage() {
 
       <header className="sticky top-0 backdrop-blur-md border-b border-white/6 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <a href="/" className="text-xl font-bold highlight hover:opacity-80 transition">EventFlow</a>
-          <a href="/landingPage" className="muted text-sm hover:accent transition">
-            ← Back to landing page
-          </a>
+          <Link href="/" className="text-xl font-bold highlight hover:opacity-80 transition">EventFlow</Link>
+          <Link href="/" className="muted text-sm hover:accent transition">
+            ← Back to EventFlow
+          </Link>
         </div>
       </header>
 
-      <main className="min-h-screen pb-20 relative z-10">
-        <section className="max-w-7xl mx-auto px-6 pt-12">
-          <div className="mb-8">
-            <p className="text-xs uppercase tracking-wider muted mb-4">Step 1 of 4 — Event Hiring Request</p>
+      <main className="relative z-10 min-h-screen pb-20">
+        <section className="relative mx-auto max-w-7xl px-4 pb-6 pt-6 sm:px-6 sm:pt-8">
+          <div className="mb-6">
+            <p className="mb-3 text-xs uppercase tracking-wider text-teal-300/90">Step 1 of 4 — Event Hiring Request</p>
             <div className="flex gap-2">
-              <div className="h-1 bg-linear-to-r from-blue-500 to-teal-500 rounded-full" style={{ width: '25%' }} />
-              <div className="h-1 bg-white/8 rounded-full" style={{ width: '25%' }} />
-              <div className="h-1 bg-white/8 rounded-full" style={{ width: '25%' }} />
-              <div className="h-1 bg-white/8 rounded-full" style={{ width: '25%' }} />
+              <div className="h-1 rounded-full bg-gradient-to-r from-blue-500 to-teal-500" style={{ width: '25%' }} />
+              <div className="h-1 rounded-full bg-white/10" style={{ width: '25%' }} />
+              <div className="h-1 rounded-full bg-white/10" style={{ width: '25%' }} />
+              <div className="h-1 rounded-full bg-white/10" style={{ width: '25%' }} />
             </div>
-            <div className="flex justify-between text-xs muted mt-3 gap-2">
-              <span className="font-semibold text-foreground">Event Info</span>
+            <div className="mt-3 flex justify-between gap-2 text-xs text-on-surface-variant">
+              <span className="font-semibold text-on-background">Event Info</span>
               <span>Organizer</span>
               <span>Workforce</span>
               <span>Technology</span>
             </div>
           </div>
-        </section>
-
-        <section className="max-w-7xl mx-auto px-6 py-10 relative -mb-15">
-          <div className={`mb-16 ${revealClass('hero')}`} ref={setSectionRef('hero')} data-reveal-key="hero">
-            <h1 className="text-5xl sm:text-6xl font-extrabold leading-tight mb-6 text-center">
+          <div className={`${revealClass('hero')}`} ref={setSectionRef('hero')} data-reveal-key="hero">
+            <h1 className="mb-4 text-center text-4xl font-extrabold leading-tight sm:text-5xl lg:text-6xl">
               Deploy Event Workforce <span className="highlight">Infrastructure</span>
             </h1>
-            <p className="text-lg muted max-w-2xl leading-relaxed text-center mx-auto">
+            <p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-on-surface-variant">
               Configure RFID tracking, facial recognition, and geofencing for your event operations.
             </p>
           </div>
@@ -650,25 +650,35 @@ export default function HiringDetailsPage() {
           </div>
         </section>
 
-        <section className="max-w-7xl mx-auto px-80 py-10 border-t border-white/6 mt-8">
+        <section className="mx-auto mt-6 max-w-7xl border-t border-white/10 px-4 pb-16 pt-10 sm:px-6">
           <div
-            className={`max-w-2xl glass p-8 rounded-xl lift-card ${revealClass('submit')}`}
+            className={`glass mx-auto max-w-xl rounded-2xl p-8 text-center ${revealClass('submit')}`}
             ref={setSectionRef('submit')}
             data-reveal-key="submit"
           >
-            <h3 className="text-2xl font-bold mb-3">Request Deployment</h3>
-            <p className="muted mb-6">
+            <h3 className="text-2xl font-bold text-on-background">Request Deployment</h3>
+            <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
               Response time: within 24 hours. Enterprise onboarding required. Secure submission.
             </p>
-            <button className="btn-primary w-full py-4 text-base font-semibold rounded-lg hover:shadow-lg hover:shadow-blue-500/20">
+            <button
+              type="button"
+              onClick={() => setRequestSubmitted(true)}
+              className="mt-5 inline-flex w-full min-h-[52px] items-center justify-center rounded-xl bg-gradient-to-r from-surface-tint to-brand-deep px-6 py-4 text-base font-semibold text-on-secondary shadow-[0_0_24px_rgba(81,153,245,0.35)] transition hover:brightness-110 active:scale-[0.99]"
+            >
               Submit Hiring Request
             </button>
-            <a href="#" className="muted text-sm hover:accent transition block text-center mt-4">
+            <a
+              href="#"
+              className="mt-4 inline-block text-sm text-surface-tint/90 underline-offset-4 transition hover:text-surface-tint hover:underline"
+              onClick={(e) => e.preventDefault()}
+            >
               Download request summary (PDF mock)
             </a>
-            <p className="text-sm text-emerald-300 mt-5">
-              Your request has been received. Our EventFlow team will contact you within 24 hours.
-            </p>
+            {requestSubmitted ? (
+              <p className="mt-5 text-center text-sm font-medium leading-relaxed text-emerald-300">
+                Your request has been received. Our EventFlow team will contact you within 24 hours.
+              </p>
+            ) : null}
           </div>
         </section>
       </main>
