@@ -222,7 +222,7 @@ export default function HiringDetailsPage() {
           </div>
           <div className={`${revealClass('hero')}`} ref={setSectionRef('hero')} data-reveal-key="hero">
             <h1 className="mb-4 text-center text-4xl font-extrabold leading-tight sm:text-5xl lg:text-6xl">
-              Deploy Event Workforce <span className="highlight">Infrastructure</span>
+              <span className="highlight">EventFlow</span> Infrastructure
             </h1>
             <p className="mx-auto max-w-2xl text-center text-lg leading-relaxed text-on-surface-variant">
               Configure RFID tracking, facial recognition, and geofencing for your event operations.

@@ -38,13 +38,7 @@ function MiniBars() {
 function CertProgress() {
   return (
     <div className="mt-4">
-      <div className="mb-2 flex justify-between text-[10px] font-heading uppercase tracking-widest text-on-surface-variant">
-        <span>Generating…</span>
-        <span className="text-surface-tint">85%</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full border border-surface-tint/30 bg-surface-container-highest/60">
-        <div className="h-full w-[85%] rounded-full bg-gradient-to-r from-surface-tint to-brand-deep shadow-[0_0_12px_rgba(81,153,245,0.4)]" />
-      </div>
+      
     </div>
   );
 }
