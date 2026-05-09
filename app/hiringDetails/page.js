@@ -4,7 +4,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 
-const roleOptions = ['Security', 'Check-in Staff', 'Supervisors', 'Technical Staff'];
 const technologyOptions = [
   {
     key: 'rfid',
@@ -37,12 +36,17 @@ export default function HiringDetailsPage() {
   const [visibleSections, setVisibleSections] = useState({});
   const [activeOverviewTab, setActiveOverviewTab] = useState('event');
   const [requestSubmitted, setRequestSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [requestId, setRequestId] = useState('');
+  const [emailNotice, setEmailNotice] = useState('');
 
   const [form, setForm] = useState({
     eventName: '',
     eventType: '',
     eventDate: '',
-    eventTime: '',
+    eventStartTime: '',
+    eventEndTime: '',
     venue: '',
     address: '',
     attendance: '',
@@ -51,11 +55,8 @@ export default function HiringDetailsPage() {
     email: '',
     phone: '',
     organizationType: '',
-    staffCount: '',
-    shiftType: '',
     specialRequirements: '',
     additionalNotes: '',
-    roles: [],
     technologies: ['rfid', 'face'],
     consentIdentity: false,
     consentBiometric: false,
@@ -65,15 +66,6 @@ export default function HiringDetailsPage() {
 
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const toggleRole = (role) => {
-    setForm((prev) => ({
-      ...prev,
-      roles: prev.roles.includes(role)
-        ? prev.roles.filter((r) => r !== role)
-        : [...prev.roles, role],
-    }));
   };
 
   const toggleTechnology = (key) => {
@@ -104,13 +96,6 @@ export default function HiringDetailsPage() {
       title: form.organization || 'Organizer profile',
       body: form.contactName || 'Client identity and contact information.',
       target: 'client-identity',
-    },
-    {
-      key: 'workforce',
-      label: 'Workforce',
-      title: form.staffCount ? `${form.staffCount} staff required` : 'Workforce setup',
-      body: form.shiftType || 'Define staff, shifts, and role allocation.',
-      target: 'staff-setup',
     },
     {
       key: 'systems',
@@ -165,6 +150,37 @@ export default function HiringDetailsPage() {
   const inputClass =
     'w-full rounded-lg border border-white/10 bg-surface-container-highest/50 px-4 py-3 text-sm text-on-background transition placeholder:text-on-surface-variant/45 focus:outline-none focus:ring-2 focus:ring-surface-tint/35';
 
+  const submitRequest = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError('');
+    setEmailNotice('');
+    try {
+      const res = await fetch('/api/requests', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Submission failed. Please try again.');
+      }
+      setRequestSubmitted(true);
+      setRequestId(data?.request?.id || '');
+      const applicantErr = data?.email?.applicant?.error;
+      const adminErr = data?.email?.admin?.error;
+      if (data?.email?.enabled && (applicantErr || adminErr)) {
+        setEmailNotice(`Request submitted, but email sending failed. ${applicantErr || adminErr}`);
+      } else if (data?.email?.reason) {
+        setEmailNotice(data.email.reason);
+      }
+    } catch (e) {
+      setSubmitError(e?.message || 'Submission failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div style={{ background: 'var(--background)', color: 'var(--foreground)' }} className="relative overflow-hidden">
       <div className="hero-bg" aria-hidden>
@@ -205,21 +221,6 @@ export default function HiringDetailsPage() {
 
       <main className="relative z-10 min-h-screen pb-20">
         <section className="relative mx-auto max-w-7xl px-4 pb-6 pt-6 sm:px-6 sm:pt-8">
-          <div className="mb-6">
-            <p className="mb-3 text-xs uppercase tracking-wider text-teal-300/90">Step 1 of 4 — Event Hiring Request</p>
-            <div className="flex gap-2">
-              <div className="h-1 rounded-full bg-gradient-to-r from-blue-500 to-teal-500" style={{ width: '25%' }} />
-              <div className="h-1 rounded-full bg-white/10" style={{ width: '25%' }} />
-              <div className="h-1 rounded-full bg-white/10" style={{ width: '25%' }} />
-              <div className="h-1 rounded-full bg-white/10" style={{ width: '25%' }} />
-            </div>
-            <div className="mt-3 flex justify-between gap-2 text-xs text-on-surface-variant">
-              <span className="font-semibold text-on-background">Event Info</span>
-              <span>Organizer</span>
-              <span>Workforce</span>
-              <span>Technology</span>
-            </div>
-          </div>
           <div className={`${revealClass('hero')}`} ref={setSectionRef('hero')} data-reveal-key="hero">
             <h1 className="mb-4 text-center text-4xl font-extrabold leading-tight sm:text-5xl lg:text-6xl">
               <span className="highlight">EventFlow</span> Infrastructure
@@ -282,7 +283,7 @@ export default function HiringDetailsPage() {
                   </div>
                 </div>
 
-                <div className="grid sm:grid-cols-2 gap-6">
+                <div className="grid sm:grid-cols-3 gap-6">
                   <div>
                     <label className="text-xs uppercase tracking-wider muted block mb-2">Event Date</label>
                     <input
@@ -293,12 +294,21 @@ export default function HiringDetailsPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-xs uppercase tracking-wider muted block mb-2">Event Time</label>
+                    <label className="text-xs uppercase tracking-wider muted block mb-2">Start Time</label>
                     <input
                       type="time"
                       className={inputClass}
-                      value={form.eventTime}
-                      onChange={(e) => updateField('eventTime', e.target.value)}
+                      value={form.eventStartTime}
+                      onChange={(e) => updateField('eventStartTime', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs uppercase tracking-wider muted block mb-2">End Time</label>
+                    <input
+                      type="time"
+                      className={inputClass}
+                      value={form.eventEndTime}
+                      onChange={(e) => updateField('eventEndTime', e.target.value)}
                     />
                   </div>
                 </div>
@@ -389,79 +399,6 @@ export default function HiringDetailsPage() {
                       onChange={(e) => updateField('organizationType', e.target.value)}
                     />
                   </div>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className={`glass p-12 rounded-xl lift-card bg-linear-to-br from-blue-500/8 to-transparent ${revealClass('staff-setup')}`}
-              ref={setSectionRef('staff-setup')}
-              data-reveal-key="staff-setup"
-            >
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold mb-2">Staff Deployment Setup</h2>
-                <p className="text-sm muted">Workforce structure and operational requirements</p>
-              </div>
-
-              <div className="space-y-6">
-                <div className="grid sm:grid-cols-2 gap-6">
-                  <div>
-                    <label className="text-xs uppercase tracking-wider muted block mb-2">Number of Staff Needed</label>
-                    <input
-                      type="number"
-                      placeholder="e.g., 50"
-                      className={inputClass}
-                      value={form.staffCount}
-                      onChange={(e) => updateField('staffCount', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs uppercase tracking-wider muted block mb-2">Shift Type</label>
-                    <select
-                      className={inputClass}
-                      value={form.shiftType}
-                      onChange={(e) => updateField('shiftType', e.target.value)}
-                    >
-                      <option value="">Select shift type</option>
-                      <option value="Full Day">Full Day</option>
-                      <option value="Custom">Custom</option>
-                      <option value="Multiple Shifts">Multiple Shifts</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs uppercase tracking-wider muted block mb-3">Roles Required</label>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    {roleOptions.map((role) => {
-                      const active = form.roles.includes(role);
-                      return (
-                        <button
-                          type="button"
-                          key={role}
-                          onClick={() => toggleRole(role)}
-                          className={`text-left px-4 py-3 rounded-lg transition ${
-                            active
-                              ? 'bg-blue-500/20 border border-blue-400/35 text-white'
-                              : 'bg-white/4 text-(--muted) hover:bg-white/8'
-                          }`}
-                        >
-                          {role}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs uppercase tracking-wider muted block mb-2">Special Requirements</label>
-                  <textarea
-                    placeholder="Any staffing constraints, certification rules, or deployment protocols"
-                    className={`${inputClass} resize-none`}
-                    rows="4"
-                    value={form.specialRequirements}
-                    onChange={(e) => updateField('specialRequirements', e.target.value)}
-                  />
                 </div>
               </div>
             </div>
@@ -611,12 +548,6 @@ export default function HiringDetailsPage() {
                 </div>
 
                 <div className="pb-4 border-b border-white/6">
-                  <p className="text-xs uppercase tracking-wider muted mb-3">Workforce</p>
-                  <p className="muted">Staff required: <span className="text-white">{form.staffCount || 'Not specified'}</span></p>
-                  <p className="muted">Roles: <span className="text-white">{form.roles.length ? form.roles.join(', ') : 'None selected'}</span></p>
-                </div>
-
-                <div>
                   <p className="text-xs uppercase tracking-wider muted mb-3">Systems</p>
                   <div className="space-y-2">
                     {activeSystems.length ? (
@@ -624,7 +555,7 @@ export default function HiringDetailsPage() {
                         <button
                           type="button"
                           key={system.key}
-                          onClick={() => jumpToSection(overviewTabs[3])}
+                          onClick={() => jumpToSection(overviewTabs[2])}
                           className="flex items-center justify-between w-full rounded-lg border border-white/6 bg-white/3 px-3 py-2 text-left hover:bg-white/8 transition"
                         >
                           <span className="flex items-center gap-2">
@@ -637,7 +568,7 @@ export default function HiringDetailsPage() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => jumpToSection(overviewTabs[3])}
+                        onClick={() => jumpToSection(overviewTabs[2])}
                         className="w-full rounded-lg border border-white/6 bg-white/3 px-3 py-2 text-left muted hover:bg-white/8 transition"
                       >
                         No systems enabled
@@ -652,39 +583,50 @@ export default function HiringDetailsPage() {
 
         <section className="mx-auto mt-6 w-full max-w-6xl border-t border-white/10 px-4 pb-16 pt-12 sm:px-6">
           <div
-            className={`glass mx-auto w-full max-w-5xl rounded-[2rem] p-6 sm:p-8 lg:p-10 ${revealClass('submit')}`}
+            className={`${revealClass('submit')}`}
             ref={setSectionRef('submit')}
             data-reveal-key="submit"
           >
-            <div className="grid gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] lg:items-center">
-              <div className="max-w-2xl text-center lg:text-left">
-                <p className="label-caps text-surface-tint/90">Enterprise onboarding</p>
-                <h3 className="mt-3 text-3xl font-bold text-on-background sm:text-4xl">Request Deployment</h3>
-                <p className="mt-4 text-sm leading-relaxed text-on-surface-variant sm:text-base">
-                  Response time: within 24 hours. Enterprise onboarding required. Secure submission.
-                </p>
-              </div>
-
-              <div className="flex h-full flex-col justify-center rounded-[1.5rem] border border-white/6 bg-white/3 p-5 sm:p-6">
-                <button
-                  type="button"
-                  onClick={() => setRequestSubmitted(true)}
-                  className="inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-gradient-to-r from-surface-tint to-brand-deep px-6 py-4 text-base font-semibold text-on-secondary shadow-[0_0_24px_rgba(81,153,245,0.35)] transition hover:brightness-110 active:scale-[0.99]"
-                >
-                  Submit Hiring Request
-                </button>
-                <a
-                  href="#"
-                  className="mt-4 inline-block text-center text-sm text-surface-tint/90 underline-offset-4 transition hover:text-surface-tint hover:underline"
-                  onClick={(e) => e.preventDefault()}
-                >
-                  Download request summary (PDF mock)
-                </a>
-                {requestSubmitted ? (
-                  <p className="mt-5 text-center text-sm font-medium leading-relaxed text-emerald-300">
-                    Your request has been received. Our EventFlow team will contact you within 24 hours.
+            <div className="glass mx-auto max-w-5xl rounded-2xl p-8">
+              <div className="grid gap-6 lg:grid-cols-[minmax(420px,1fr)_360px] lg:items-center">
+                <div className="min-w-[320px] max-w-none">
+                  <p className="text-xs font-semibold uppercase tracking-[0.25em] text-teal-300/90">Enterprise onboarding</p>
+                  <h3 className="mt-2 text-3xl font-extrabold tracking-tight text-on-background">Request Deployment</h3>
+                  <p className="mt-2 max-w-xl whitespace-normal text-lg leading-relaxed text-on-surface-variant">
+                    Response time: within 24 hours. Enterprise onboarding required. Secure submission.
                   </p>
-                ) : null}
+                  {requestSubmitted ? (
+                    <p className="mt-4 text-sm font-medium leading-relaxed text-emerald-300">
+                      Your request has been received{requestId ? ` (${requestId})` : ''}. Our EventFlow team will contact you within 24 hours.
+                    </p>
+                  ) : null}
+                  {submitError ? (
+                    <p className="mt-4 text-sm font-medium leading-relaxed text-rose-200">{submitError}</p>
+                  ) : null}
+                  {emailNotice ? (
+                    <p className="mt-3 text-xs font-semibold tracking-[0.04em] text-amber-200/90">{emailNotice}</p>
+                  ) : null}
+                </div>
+
+                <div className="shrink-0">
+                  <div className="rounded-2xl border border-white/10 bg-white/4 p-5 shadow-[inset_0_0_18px_rgba(81,153,245,0.10)] backdrop-blur-xl lg:w-[360px]">
+                    <button
+                      type="button"
+                      disabled={submitting || requestSubmitted}
+                      onClick={submitRequest}
+                      className="inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-gradient-to-r from-surface-tint to-brand-deep px-8 py-4 text-base font-semibold text-on-secondary shadow-[0_0_24px_rgba(81,153,245,0.35)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 active:scale-[0.99]"
+                    >
+                      {submitting ? 'Submitting…' : requestSubmitted ? 'Request Submitted' : 'Submit Hiring Request'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 w-full text-sm text-surface-tint/90 underline-offset-4 transition hover:text-surface-tint hover:underline"
+                      onClick={(e) => e.preventDefault()}
+                    >
+                      Download request summary (PDF mock)
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

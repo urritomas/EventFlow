@@ -14,7 +14,7 @@ const marketingLinks = [
 ];
 
 const appLinks = [
-  { href: "/", label: "Home" },
+  { href: "/requests", label: "Requests" },
   { href: "/events", label: "Events" },
   { href: "/events/new", label: "Create" },
   { href: "/profile", label: "Profile" },
