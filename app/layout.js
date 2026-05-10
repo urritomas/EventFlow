@@ -25,7 +25,11 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${spaceGrotesk.variable} h-full`}>
+    <html
+      lang="en"
+      data-scroll-behavior="smooth"
+      className={`dark ${inter.variable} ${spaceGrotesk.variable} h-full`}
+    >
       <body className="min-h-full bg-background text-on-background">
         <Providers>{children}</Providers>
       </body>

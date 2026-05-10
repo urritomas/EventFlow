@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createRequest, listRequests } from "@/lib/requests-store";
 import { renderRequestReceivedEmail } from "@/lib/email/request-received-template";
 import { sendBrevoEmail } from "@/lib/email/brevo";
+import { saveHiringDetailsSubmission } from "@/lib/hiring-details-db";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,7 @@ export async function GET() {
 export async function POST(req) {
   try {
     const form = await req.json();
+    const persisted = await saveHiringDetailsSubmission(form);
     const created = await createRequest(form);
 
     const apiKey = process.env.BREVO_API_KEY;
@@ -86,9 +88,26 @@ export async function POST(req) {
       }
     }
 
-    return NextResponse.json({ request: created, email }, { status: 201 });
+    return NextResponse.json(
+      {
+        request: created,
+        database: {
+          event: persisted.event,
+          client: persisted.client,
+          activation: persisted.activation,
+        },
+        email,
+      },
+      { status: 201 }
+    );
   } catch (e) {
-    return NextResponse.json({ error: e?.message || "Failed to submit request." }, { status: 400 });
+    console.error("POST /api/requests failed:", e);
+    return NextResponse.json(
+      {
+        error: e?.message || "Failed to submit request.",
+      },
+      { status: 400 }
+    );
   }
 }
 
