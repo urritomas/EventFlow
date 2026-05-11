@@ -2,13 +2,9 @@
 EventFlow - Facial Recognition Module
 File: api.py
 
-FastAPI server — uses Supabase with your existing schema.
-
-Tables used:
-  participants    — participant_id (serial), name, student_id, email
-  face_embeddings — embedding_id (serial), participant_id, embedding, is_active
-  attendance      — attendance_id (serial), participant_id, event_id, similarity, verified
-  events          — your existing table, event_id (int4)
+FastAPI server — active event is fetched dynamically from Supabase.
+No hardcoded event IDs. The active event is whichever row in `events`
+has is_active = true.
 
 Run with:
     uvicorn api:app --host 0.0.0.0 --port 8000 --reload
@@ -41,36 +37,67 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("eventflow.api")
 
 # ── App state ─────────────────────────────────────────────────────────────────
-supabase: Optional[Client] = None
-engine:   Optional[FaceEngine] = None
-gallery:  list[dict] = []
+supabase:      Optional[Client]    = None
+engine:        Optional[FaceEngine] = None
+gallery:       list[dict]           = []
+active_event:  Optional[dict]       = None  # { event_id, event_name, ... }
+
+
+# ── Active event ──────────────────────────────────────────────────────────────
+
+def fetch_active_event() -> Optional[dict]:
+    """
+    Fetches the single event where is_active = true from Supabase.
+    Returns the full event row as a dict, or None if no event is active.
+    """
+    res = (
+        supabase.table("events")
+        .select("event_id, event_name, event_type, event_date, venue_name")
+        .eq("is_active", True)
+        .limit(1)
+        .execute()
+    )
+    if res.data:
+        return res.data[0]
+    return None
 
 
 # ── Gallery ───────────────────────────────────────────────────────────────────
 
 def reload_gallery() -> None:
     """
-    Loads all active face embeddings from Supabase into memory.
-    Joins face_embeddings → participants to get name and student_id.
-    Called at startup and after every register/re-enroll.
-    """
-    global gallery
+    Reloads the active event from Supabase, then loads all face embeddings
+    for that event into the in-memory gallery.
 
-    response = (
+    If no event is active, the gallery is cleared and verification is blocked.
+    """
+    global gallery, active_event
+
+    active_event = fetch_active_event()
+
+    if active_event is None:
+        gallery = []
+        logger.warning("No active event found. Set is_active=true on an event in Supabase.")
+        return
+
+    event_id = active_event["event_id"]
+
+    res = (
         supabase.table("face_embeddings")
         .select(
-            "embedding_id, participant_id, embedding, "
+            "embedding_id, participant_id, embedding, event_id, "
             "participants(participant_id, name, student_id)"
         )
         .eq("is_active", True)
+        .eq("event_id", event_id)
         .execute()
     )
 
-    rows = response.data or []
+    rows    = res.data or []
     gallery = []
 
     for row in rows:
-        emb = np.array(row["embedding"], dtype=np.float32)
+        emb  = np.array(row["embedding"], dtype=np.float32)
         norm = np.linalg.norm(emb)
         if norm == 0:
             continue
@@ -78,10 +105,13 @@ def reload_gallery() -> None:
             "participant_id": row["participants"]["participant_id"],
             "name":           row["participants"]["name"],
             "student_id":     row["participants"]["student_id"],
-            "embedding":      emb / norm,  # pre-normalized for fast dot-product
+            "embedding":      emb / norm,
         })
 
-    logger.info("Gallery reloaded: %d participant(s).", len(gallery))
+    logger.info(
+        "Gallery reloaded | event='%s' (id=%d) | %d participant(s).",
+        active_event["event_name"], event_id, len(gallery),
+    )
 
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
@@ -92,9 +122,9 @@ async def lifespan(app: FastAPI):
     logger.info("Starting EventFlow API...")
 
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    engine = FaceEngine(
-        model_name="buffalo_l",
-        det_size=(640, 640),
+    engine   = FaceEngine(
+        model_name="buffalo_sc",
+        det_size=(320, 320),
         threshold=0.45,
         use_gpu=False,
     )
@@ -113,7 +143,6 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:3001",
-        # Add your deployed frontend URL when going live:
         # "https://your-eventflow-app.vercel.app",
     ],
     allow_methods=["*"],
@@ -135,15 +164,89 @@ def decode_image(file_bytes: bytes) -> np.ndarray:
     return frame
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+def require_active_event() -> dict:
+    """
+    Returns the active event or raises 503 if none is set.
+    Call this at the start of any route that needs an active event.
+    """
+    if active_event is None:
+        raise HTTPException(
+            status_code=503,
+            detail="No active event. Set is_active=true on an event in Supabase."
+        )
+    return active_event
+
+
+# ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
 def health_check():
-    """Confirms the server, model, and gallery are ready."""
+    """Returns server status, active event info, and gallery size."""
     return {
         "status":       "ok",
+        "active_event": active_event,   # None if no event is active
         "gallery_size": len(gallery),
         "model":        "buffalo_l",
+    }
+
+
+# ── Active event management ───────────────────────────────────────────────────
+
+@app.get("/api/active-event")
+def get_active_event():
+    """Returns the currently active event."""
+    event = fetch_active_event()
+    if event is None:
+        return {"active_event": None, "message": "No active event."}
+    return {"active_event": event}
+
+
+@app.post("/api/active-event/{event_id}")
+def set_active_event(event_id: int):
+    """
+    Switches the active event to the given event_id.
+    Deactivates the previous active event and reloads the gallery.
+
+    Call this from your admin panel when starting a new event.
+    """
+    # Verify the event exists
+    check = (
+        supabase.table("events")
+        .select("event_id, event_name")
+        .eq("event_id", event_id)
+        .single()
+        .execute()
+    )
+    if not check.data:
+        raise HTTPException(status_code=404, detail=f"Event ID {event_id} not found.")
+
+    # Use the SQL function to safely switch active event
+    supabase.rpc("set_active_event", {"new_event_id": event_id}).execute()
+
+    # Reload gallery for the new active event
+    reload_gallery()
+
+    logger.info("Active event switched to: %s (id=%d)", check.data["event_name"], event_id)
+
+    return {
+        "success":      True,
+        "message":      f"Active event set to '{check.data['event_name']}'.",
+        "active_event": active_event,
+        "gallery_size": len(gallery),
+    }
+
+
+@app.post("/api/reload-gallery")
+def trigger_reload():
+    """
+    Manually reloads the gallery from Supabase.
+    Useful after bulk-registering participants outside the API.
+    """
+    reload_gallery()
+    return {
+        "success":      True,
+        "active_event": active_event,
+        "gallery_size": len(gallery),
     }
 
 
@@ -156,18 +259,16 @@ async def register_participant(
     image:      UploadFile = File(...),
 ):
     """
-    Enrolls a new participant.
+    Enrolls a participant's face for the currently active event.
 
-    Steps:
-      1. Extract 512-D face embedding from the uploaded image.
-      2. Insert row into `participants`.
-      3. Insert embedding into `face_embeddings` (is_active=True).
-      4. Reload in-memory gallery.
-
-    Errors:
-      422 — no face detected in image
-      409 — student_id already registered
+    - If participant doesn't exist yet, creates them in `participants`.
+    - If they already exist, reuses their participant row.
+    - Inserts a new embedding in `face_embeddings` for the active event.
+    - One active embedding per participant per event.
     """
+    event = require_active_event()
+    event_id = event["event_id"]
+
     # Extract embedding
     frame     = decode_image(await image.read())
     embedding = engine.detect_and_embed(frame)
@@ -178,40 +279,64 @@ async def register_participant(
             detail="No face detected. Ensure the participant is clearly visible and well-lit."
         )
 
-    # Insert participant
-    try:
+    # Get or create participant
+    existing = (
+        supabase.table("participants")
+        .select("participant_id, name")
+        .eq("student_id", student_id)
+        .execute()
+    )
+
+    if existing.data:
+        participant = existing.data[0]
+    else:
         p_res = (
             supabase.table("participants")
             .insert({"name": name, "student_id": student_id})
             .execute()
         )
-    except Exception:
+        participant = p_res.data[0]
+
+    # Check if already registered for this event
+    already = (
+        supabase.table("face_embeddings")
+        .select("embedding_id")
+        .eq("participant_id", participant["participant_id"])
+        .eq("event_id", event_id)
+        .eq("is_active", True)
+        .execute()
+    )
+
+    if already.data:
         raise HTTPException(
             status_code=409,
-            detail=f"Student ID '{student_id}' is already registered. "
-                   "Use /api/re-enroll to update their face data."
+            detail=(
+                f"'{participant['name']}' is already registered for "
+                f"'{event['event_name']}'. Use /api/re-enroll to update."
+            )
         )
 
-    participant = p_res.data[0]
-
-    # Insert embedding
+    # Insert embedding for this event
     supabase.table("face_embeddings").insert({
         "participant_id": participant["participant_id"],
-        "embedding":      embedding.tolist(),  # list of 512 floats → FLOAT4[]
+        "event_id":       event_id,
+        "embedding":      embedding.tolist(),
         "is_active":      True,
     }).execute()
 
     reload_gallery()
 
     logger.info(
-        "Registered: %s (student_id=%s, participant_id=%d)",
-        name, student_id, participant["participant_id"]
+        "Registered: %s (student_id=%s) for event='%s' (id=%d)",
+        participant["name"], student_id, event["event_name"], event_id,
     )
 
     return {
         "success":        True,
-        "message":        f"{name} registered successfully.",
+        "message":        f"{participant['name']} registered for '{event['event_name']}'.",
         "participant_id": participant["participant_id"],
+        "event_id":       event_id,
+        "event_name":     event["event_name"],
     }
 
 
@@ -221,15 +346,12 @@ async def re_enroll_participant(
     image:      UploadFile = File(...),
 ):
     """
-    Replaces the face embedding for an existing participant.
-    The old embedding is marked inactive (kept for audit history).
-    A fresh embedding is inserted as the new active one.
-
-    Errors:
-      404 — student_id not found
-      422 — no face detected in image
+    Replaces a participant's face embedding for the active event.
+    Old embedding is marked inactive. New one is inserted as active.
     """
-    # Look up participant by student_id
+    event    = require_active_event()
+    event_id = event["event_id"]
+
     p_res = (
         supabase.table("participants")
         .select("participant_id, name")
@@ -238,38 +360,34 @@ async def re_enroll_participant(
         .execute()
     )
     if not p_res.data:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Student ID '{student_id}' not found."
-        )
+        raise HTTPException(status_code=404, detail=f"Student ID '{student_id}' not found.")
 
     participant = p_res.data
 
-    # Extract new embedding
     frame     = decode_image(await image.read())
     embedding = engine.detect_and_embed(frame)
     if embedding is None:
         raise HTTPException(status_code=422, detail="No face detected in the image.")
 
-    # Deactivate current active embedding
+    # Deactivate old embedding for this event only
     supabase.table("face_embeddings").update({"is_active": False}).eq(
         "participant_id", participant["participant_id"]
-    ).eq("is_active", True).execute()
+    ).eq("event_id", event_id).eq("is_active", True).execute()
 
-    # Insert new active embedding
+    # Insert fresh embedding
     supabase.table("face_embeddings").insert({
         "participant_id": participant["participant_id"],
+        "event_id":       event_id,
         "embedding":      embedding.tolist(),
         "is_active":      True,
     }).execute()
 
     reload_gallery()
 
-    logger.info("Re-enrolled: %s (student_id=%s)", participant["name"], student_id)
-
     return {
-        "success": True,
-        "message": f"Face updated for '{participant['name']}'.",
+        "success":    True,
+        "message":    f"Face updated for '{participant['name']}' ({event['event_name']}).",
+        "event_name": event["event_name"],
     }
 
 
@@ -277,24 +395,19 @@ async def re_enroll_participant(
 
 @app.post("/api/verify")
 async def verify_participant(
-    event_id:       int        = Form(...),   # int4 to match your events table
     image:          UploadFile = File(...),
     log_attendance: bool       = Form(True),
 ):
     """
-    Verifies a face against the registered gallery.
-
-    Steps:
-      1. Decode image and extract embedding.
-      2. Cosine similarity match against in-memory gallery.
-      3. If matched and log_attendance=True, upsert into `attendance`.
-
-    Returns verified=True/False with name, student_id, and similarity score.
+    Verifies a face against the active event's gallery.
+    Only participants registered for the active event can be matched.
     """
+    event = require_active_event()
+
     if not gallery:
         raise HTTPException(
             status_code=503,
-            detail="No registered participants. Register participants first."
+            detail=f"No participants registered for '{event['event_name']}' yet."
         )
 
     frame     = decode_image(await image.read())
@@ -311,11 +424,10 @@ async def verify_participant(
     match, score = engine.match(embedding, gallery)
 
     if match and log_attendance:
-        # Upsert — updates existing row if participant already checked in
         supabase.table("attendance").upsert(
             {
                 "participant_id": match["participant_id"],
-                "event_id":       event_id,
+                "event_id":       event["event_id"],
                 "similarity":     float(score),
                 "verified":       True,
             },
@@ -323,49 +435,66 @@ async def verify_participant(
         ).execute()
 
         logger.info(
-            "Verified: %s (student_id=%s, event_id=%d, score=%.4f)",
-            match["name"], match["student_id"], event_id, score,
+            "Verified: %s (student_id=%s, event='%s', score=%.4f)",
+            match["name"], match["student_id"], event["event_name"], score,
         )
 
     if match:
         return {
-            "verified":        True,
-            "name":            match["name"],
-            "student_id":      match["student_id"],
-            "participant_id":  match["participant_id"],
-            "similarity":      round(score, 4),
-            "threshold":       engine.threshold,
-            "message":         f"Welcome, {match['name']}!",
+            "verified":       True,
+            "name":           match["name"],
+            "student_id":     match["student_id"],
+            "participant_id": match["participant_id"],
+            "similarity":     round(score, 4),
+            "threshold":      engine.threshold,
+            "event_name":     event["event_name"],
+            "message":        f"Welcome, {match['name']}!",
         }
 
     return {
         "verified":   False,
         "similarity": round(score, 4),
         "threshold":  engine.threshold,
-        "message":    "Face not recognized.",
+        "message":    "Face not recognized or not registered for this event.",
     }
 
 
 # ── Participants ──────────────────────────────────────────────────────────────
 
 @app.get("/api/participants")
-def list_participants():
-    """Returns all registered participants without embedding data."""
-    res = (
-        supabase.table("participants")
-        .select("participant_id, name, student_id, email, created_at")
-        .order("created_at", desc=True)
-        .execute()
+def list_participants(event_id: Optional[int] = None):
+    """
+    Lists participants. If event_id is given, only returns those registered
+    for that event. Defaults to the active event if no event_id provided.
+    """
+    filter_id = event_id if event_id is not None else (
+        active_event["event_id"] if active_event else None
     )
-    return {"count": len(res.data), "participants": res.data}
+
+    if filter_id is not None:
+        res = (
+            supabase.table("face_embeddings")
+            .select("participants(participant_id, name, student_id, email, created_at)")
+            .eq("event_id", filter_id)
+            .eq("is_active", True)
+            .execute()
+        )
+        participants = [row["participants"] for row in (res.data or [])]
+    else:
+        res = (
+            supabase.table("participants")
+            .select("participant_id, name, student_id, email, created_at")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        participants = res.data or []
+
+    return {"count": len(participants), "participants": participants}
 
 
 @app.delete("/api/participants/{student_id}")
 def delete_participant(student_id: str):
-    """
-    Deletes a participant by student_id.
-    Cascades automatically to face_embeddings and attendance (ON DELETE CASCADE).
-    """
+    """Deletes a participant. Cascades to face_embeddings and attendance."""
     res = (
         supabase.table("participants")
         .delete()
@@ -373,10 +502,7 @@ def delete_participant(student_id: str):
         .execute()
     )
     if not res.data:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Student ID '{student_id}' not found."
-        )
+        raise HTTPException(status_code=404, detail=f"Student ID '{student_id}' not found.")
     reload_gallery()
     return {"success": True, "message": f"Participant '{student_id}' deleted."}
 
@@ -386,25 +512,27 @@ def delete_participant(student_id: str):
 @app.get("/api/attendance")
 def get_attendance(event_id: Optional[int] = None):
     """
-    Returns attendance records joined with participant and event info.
-    Optionally filtered by event_id (int).
-
-    Example: GET /api/attendance?event_id=3
+    Returns attendance records for the given event_id.
+    Defaults to the active event if not specified.
     """
-    query = (
+    filter_id = event_id if event_id is not None else (
+        active_event["event_id"] if active_event else None
+    )
+
+    if filter_id is None:
+        return {"count": 0, "records": [], "message": "No active event."}
+
+    res = (
         supabase.table("attendance")
         .select(
             "attendance_id, similarity, verified, verified_at, "
             "participants(name, student_id), "
             "events(event_name)"
         )
+        .eq("event_id", filter_id)
         .order("verified_at", desc=True)
+        .execute()
     )
-
-    if event_id is not None:
-        query = query.eq("event_id", event_id)
-
-    res = query.execute()
 
     records = [
         {
