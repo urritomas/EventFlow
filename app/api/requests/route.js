@@ -7,8 +7,16 @@ import { saveHiringDetailsSubmission } from "@/lib/hiring-details-db";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const requests = await listRequests();
-  return NextResponse.json({ requests });
+  try {
+    const requests = await listRequests();
+    return NextResponse.json({ requests });
+  } catch (e) {
+    console.error("GET /api/requests failed:", e);
+    return NextResponse.json(
+      { requests: [], error: e?.message || "Failed to load requests." },
+      { status: 500 }
+    );
+  }
 }
 
 export async function POST(req) {
