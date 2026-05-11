@@ -33,12 +33,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <div className="pointer-events-none fixed bottom-6 left-6 z-0 hidden space-y-1 font-mono text-xs text-surface-tint opacity-30 lg:block">
-        <p>LOC_SYST: ACTIVE</p>
-        <p>LAT: 40.7128 | LONG: -74.0060</p>
-        <p>ENC_STAT: SHA-256_VERIFIED</p>
-      </div>
-
       <div className="pointer-events-none fixed left-0 top-0 z-[5] h-px w-full bg-gradient-to-r from-transparent via-surface-tint/50 to-transparent" />
     </div>
   );

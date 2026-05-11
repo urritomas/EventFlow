@@ -11,6 +11,8 @@ const marketingLinks = [
   { href: "/#solutions", label: "Solutions" },
   { href: "/#contact", label: "Contact" },
   { href: "/#about", label: "About" },
+  { href: "/register", label: "Register" },
+  { href: "/attendance_scanner", label: "Attendance Scanner" },
 ];
 
 const appLinks = [
