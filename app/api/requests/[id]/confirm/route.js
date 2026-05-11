@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getRequestById, updateRequestStatus } from "@/lib/requests-store";
 import { sendBrevoEmail } from "@/lib/email/brevo";
 import { renderBookingConfirmedEmail } from "@/lib/email/booking-confirmed-template";
+import { upsertClientUser } from "@/lib/users-store";
 
 export const runtime = "nodejs";
 
@@ -28,8 +29,30 @@ export async function POST(_req, { params }) {
     const applicantEmail = request?.applicant?.email;
     const applicantName = request?.applicant?.name || "there";
 
+    const loginUrl =
+      process.env.PORTAL_LOGIN_URL ||
+      (process.env.NEXT_PUBLIC_APP_URL
+        ? `${process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "")}/login`
+        : "http://localhost:3000/login");
+
+    let portalAccess = null;
+    if (applicantEmail) {
+      const created = await upsertClientUser({ email: applicantEmail, name: applicantName });
+      portalAccess = {
+        username: created.user.username,
+        email: created.user.email,
+        password: created.password,
+        loginUrl,
+      };
+    }
+
     const subject = `EventFlow booking confirmed — ${request.id}`;
-    const html = renderBookingConfirmedEmail({ request });
+    const html = renderBookingConfirmedEmail({
+      request: {
+        ...request,
+        portalAccess,
+      },
+    });
 
     const email = {
       enabled: Boolean(apiKey && fromEmail),

@@ -31,9 +31,14 @@ function isActive(pathname, href) {
 export function Navbar({ variant = "marketing" }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const [open, setOpen] = useState(false);
-  const links = variant === "marketing" ? marketingLinks : appLinks;
+  const links =
+    variant === "marketing"
+      ? marketingLinks
+      : user?.role === "operator"
+        ? appLinks
+        : appLinks.filter((l) => l.href !== "/requests");
 
   function handleSignOut() {
     logout();

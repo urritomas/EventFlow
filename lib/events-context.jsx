@@ -5,22 +5,32 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { mockEvents } from "@/lib/mockEvents";
 import { useAuth } from "@/lib/auth-context";
 
-const USER_EVENTS_KEY = "eventflow-user-events";
+const USER_EVENTS_PREFIX = "eventflow-user-events:";
 const DEMO_REMOVED_KEY = "eventflow-demo-removed";
 
 const EventsContext = createContext(null);
 
 export function EventsProvider({ children }) {
-  const { isAuthenticated, ready: authReady } = useAuth();
+  const { isAuthenticated, ready: authReady, user } = useAuth();
   const [userEvents, setUserEvents] = useState([]);
   const [demoRemovedIds, setDemoRemovedIds] = useState([]);
   const [hydrated, setHydrated] = useState(false);
+
+  const userKey = useMemo(() => {
+    const id = String(user?.email || user?.username || "").trim().toLowerCase();
+    return id ? `${USER_EVENTS_PREFIX}${id}` : null;
+  }, [user?.email, user?.username]);
 
   useEffect(() => {
     if (!authReady) return;
     if (isAuthenticated) {
       try {
-        const raw = localStorage.getItem(USER_EVENTS_KEY);
+        if (!userKey) {
+          setUserEvents([]);
+          setHydrated(true);
+          return;
+        }
+        const raw = localStorage.getItem(userKey);
         setUserEvents(raw ? JSON.parse(raw) : []);
       } catch {
         setUserEvents([]);
@@ -35,16 +45,17 @@ export function EventsProvider({ children }) {
       }
     }
     setHydrated(true);
-  }, [authReady, isAuthenticated]);
+  }, [authReady, isAuthenticated, userKey]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated) return;
     try {
-      localStorage.setItem(USER_EVENTS_KEY, JSON.stringify(userEvents));
+      if (!userKey) return;
+      localStorage.setItem(userKey, JSON.stringify(userEvents));
     } catch {
       /* ignore */
     }
-  }, [authReady, isAuthenticated, userEvents]);
+  }, [authReady, isAuthenticated, userEvents, userKey]);
 
   const ready = authReady && hydrated;
 
