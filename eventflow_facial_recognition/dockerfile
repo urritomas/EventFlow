@@ -1,10 +1,13 @@
 # eventflow_facial_recognition/Dockerfile
-# Uses Python 3.11 slim image which already has the system libs OpenCV needs.
 
 FROM python:3.11-slim
 
-# Install system dependencies needed by OpenCV and InsightFace
+# Install system dependencies
+# g++ and build-essential are required to compile InsightFace from source
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    g++ \
+    cmake \
     libgl1 \
     libglib2.0-0 \
     libsm6 \
@@ -24,7 +27,6 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 # Pre-download the InsightFace buffalo_l model during build
-# so the first request isn't slow
 RUN python -c "\
 from insightface.app import FaceAnalysis; \
 app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider']); \
@@ -33,9 +35,6 @@ print('Model ready.')"
 
 # Copy the rest of the application
 COPY . .
-
-# Expose port (Render sets $PORT dynamically)
-EXPOSE 8000
 
 # Start the API server
 CMD uvicorn api:app --host 0.0.0.0 --port ${PORT:-8000}
