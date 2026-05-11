@@ -142,8 +142,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "http://localhost:3001",
-        # "https://your-eventflow-app.vercel.app",
+        "https://event-flow-mu-pink.vercel.app/",
     ],
     allow_methods=["*"],
     allow_headers=["*"],
