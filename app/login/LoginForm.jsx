@@ -20,12 +20,12 @@ function LoginFormInner() {
   const safeFrom =
     fromRaw && fromRaw.startsWith("/") && !fromRaw.startsWith("//") ? fromRaw : "/events";
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    const ok = login(username, password);
-    if (!ok) {
-      setError("Invalid username or password. Use urri / 123 for this demo.");
+    const result = await login(username, password);
+    if (!result?.ok) {
+      setError(result?.error || "Invalid username or password.");
       return;
     }
     router.push(safeFrom);

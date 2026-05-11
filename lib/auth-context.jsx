@@ -9,29 +9,34 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [ready, setReady] = useState(false);
-  const [isAuthenticated, setAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const isAuthenticated = Boolean(user);
 
   useEffect(() => {
     try {
-      setAuthenticated(localStorage.getItem(STORAGE_KEY) === "1");
+      const raw = localStorage.getItem(STORAGE_KEY);
+      setUser(raw ? JSON.parse(raw) : null);
     } catch {
-      setAuthenticated(false);
+      setUser(null);
     }
     setReady(true);
   }, []);
 
-  const login = useCallback((username, password) => {
-    const u = username.trim().toLowerCase();
-    if (u === "urri" && password === "123") {
-      try {
-        localStorage.setItem(STORAGE_KEY, "1");
-      } catch {
-        /* ignore */
-      }
-      setAuthenticated(true);
-      return true;
+  const login = useCallback(async (username, password) => {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.ok || !data?.user) return { ok: false, error: data?.error || "Invalid login." };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
+    } catch {
+      /* ignore */
     }
-    return false;
+    setUser(data.user);
+    return { ok: true, user: data.user };
   }, []);
 
   const logout = useCallback(() => {
@@ -40,11 +45,11 @@ export function AuthProvider({ children }) {
     } catch {
       /* ignore */
     }
-    setAuthenticated(false);
+    setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ready, isAuthenticated, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ ready, isAuthenticated, user, login, logout }}>{children}</AuthContext.Provider>
   );
 }
 

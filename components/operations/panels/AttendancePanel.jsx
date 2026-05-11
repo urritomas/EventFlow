@@ -23,10 +23,10 @@ const HALL_IMG =
 
 /** @type {{ name: string; tag: string; passType: string }[]} */
 const RFID_ROSTER = [
-  { name: "Sarah Jenkins", tag: "RFID-PREM-8821", passType: "Premium pass" },
-  { name: "Marcus Thorne", tag: "RFID-GEN-4410", passType: "General entry" },
-  { name: "Elena Rodriguez", tag: "RFID-STF-2291", passType: "Staff access" },
-  { name: "James Okonkwo", tag: "RFID-VIP-1104", passType: "VIP lane" },
+  { name: "Sarah Jenkins", email: "sarah.jenkins@example.com", tag: "RFID-PREM-8821", passType: "Premium pass" },
+  { name: "Marcus Thorne", email: "marcus.thorne@example.com", tag: "RFID-GEN-4410", passType: "General entry" },
+  { name: "Elena Rodriguez", email: "elena.rodriguez@example.com", tag: "RFID-STF-2291", passType: "Staff access" },
+  { name: "James Okonkwo", email: "james.okonkwo@example.com", tag: "RFID-VIP-1104", passType: "VIP lane" },
 ];
 
 function formatTimeAgo(iso) {
@@ -44,6 +44,7 @@ export function AttendancePanel() {
 
   const [userSessionEventId, setUserSessionEventId] = useState("");
   const [phase, setPhase] = useState("rfid");
+  const [mode, setMode] = useState("checkin");
   /** @type {null | { name: string; tag: string; passType: string; eventId: string; eventTitle: string }} */
   const [pending, setPending] = useState(null);
   const [cameraError, setCameraError] = useState(null);
@@ -61,6 +62,12 @@ export function AttendancePanel() {
   );
 
   const sessionTitle = sessionEvent?.title ?? "Check-in session";
+
+  const eventWindow = useMemo(() => {
+    const start = sessionEvent?.date || null;
+    const end = sessionEvent?.endDate || null;
+    return { start, end };
+  }, [sessionEvent]);
 
   const occupancy = useMemo(() => {
     if (!sessionEvent?.capacity) return { current: 0, max: 1, pct: 0 };
@@ -141,18 +148,49 @@ export function AttendancePanel() {
   }, [appendLog, sessionEvent, sessionEventId]);
 
   const completeFace = useCallback(
-    (decision) => {
+    async (decision) => {
       if (!pending) return;
+      const kind = mode === "checkout" ? "checkout" : "checkin";
       appendLog({
         id: `log-${Date.now()}`,
         eventId: pending.eventId,
         eventTitle: pending.eventTitle,
         attendeeName: pending.name,
+        attendeeEmail: pending.email || null,
         rfidTag: pending.tag,
         timestamp: new Date().toISOString(),
         decision,
         lastStage: "complete",
+        kind,
       });
+
+      if (decision === "approved" && kind === "checkout" && pending.email) {
+        try {
+          const checkIn = logs.find(
+            (l) =>
+              l.decision === "approved" &&
+              (l.kind || "checkin") === "checkin" &&
+              l.eventId === pending.eventId &&
+              l.attendeeName === pending.name,
+          );
+          await fetch("/api/attendance/checkout", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              attendeeEmail: pending.email,
+              attendeeName: pending.name,
+              eventTitle: pending.eventTitle,
+              eventStart: eventWindow.start,
+              eventEnd: eventWindow.end,
+              checkInAt: checkIn?.timestamp || null,
+              checkOutAt: new Date().toISOString(),
+            }),
+          });
+        } catch {
+          // ignore email failures in demo UI
+        }
+      }
+
       setSessionOutcome(decision);
       setPhase("result");
       setTimeout(() => {
@@ -161,7 +199,7 @@ export function AttendancePanel() {
         setSessionOutcome(null);
       }, 2200);
     },
-    [appendLog, pending],
+    [appendLog, pending, mode, logs, eventWindow.start, eventWindow.end],
   );
 
   const ready = eventsReady && logReady;
@@ -171,7 +209,9 @@ export function AttendancePanel() {
       <div className="col-span-12 mb-4 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0 w-full flex-1">
           <span className="label-caps mb-2 block text-[#4285F4]">Live session</span>
-          <h1 className="font-heading text-3xl font-bold tracking-tight text-on-background lg:text-4xl">{sessionTitle}</h1>
+          <h1 className="font-heading text-3xl font-bold tracking-tight text-on-background lg:text-4xl">
+            {sessionTitle} — {mode === "checkout" ? "Check-out" : "Check-in"}
+          </h1>
           <p className="mt-2 max-w-2xl text-sm text-on-surface-variant">Scan RFID first, then confirm with the camera when it opens.</p>
         </div>
         <div className="flex w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:gap-4 xl:w-auto xl:shrink-0">
@@ -195,6 +235,27 @@ export function AttendancePanel() {
             </select>
           </div>
           <div className="flex flex-wrap gap-2">
+            <div className="glass-panel flex items-center gap-2 rounded-xl px-4 py-2">
+              <span className="font-heading text-[10px] uppercase tracking-widest text-slate-400">Mode</span>
+              <button
+                type="button"
+                onClick={() => setMode("checkin")}
+                className={`rounded-lg px-2.5 py-1 font-heading text-[10px] uppercase tracking-widest transition ${
+                  mode === "checkin" ? "bg-[#4285F4]/15 text-[#4285F4]" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                Check-in
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("checkout")}
+                className={`rounded-lg px-2.5 py-1 font-heading text-[10px] uppercase tracking-widest transition ${
+                  mode === "checkout" ? "bg-[#4285F4]/15 text-[#4285F4]" : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                Check-out
+              </button>
+            </div>
             <div className="glass-panel flex items-center gap-3 rounded-xl px-4 py-2">
               <div className="size-2 animate-pulse rounded-full bg-green-400" />
               <span className="font-mono text-xs text-on-surface-variant sm:text-sm">

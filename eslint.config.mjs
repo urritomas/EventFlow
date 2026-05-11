@@ -7,8 +7,11 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    "EventFlow/.next/**",
     "out/**",
+    "EventFlow/out/**",
     "build/**",
+    "EventFlow/build/**",
     "next-env.d.ts",
   ]),
 ]);

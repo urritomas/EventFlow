@@ -3,11 +3,23 @@ import { createRequest, listRequests } from "@/lib/requests-store";
 import { renderRequestReceivedEmail } from "@/lib/email/request-received-template";
 import { sendBrevoEmail } from "@/lib/email/brevo";
 import { saveHiringDetailsSubmission } from "@/lib/hiring-details-db";
+import { headers } from "next/headers";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
+    const apiKey = process.env.OPERATOR_API_KEY;
+    if (apiKey) {
+      // Lightweight protection for operator-only inbox.
+      // Use header: x-operator-key: <OPERATOR_API_KEY>
+      // (UI can stay client-only; this just prevents casual scraping.)
+      const h = await headers();
+      const key = h.get("x-operator-key") || "";
+      if (key !== apiKey) {
+        return NextResponse.json({ requests: [], error: "Unauthorized." }, { status: 401 });
+      }
+    }
     const requests = await listRequests();
     return NextResponse.json({ requests });
   } catch (e) {

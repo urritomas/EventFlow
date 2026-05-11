@@ -43,7 +43,7 @@ export function AttendanceLogProvider({ children }) {
   }, []);
 
   const participants = useMemo(() => {
-    const approved = logs.filter((l) => l.decision === "approved");
+    const approved = logs.filter((l) => l.decision === "approved" && (l.kind || "checkin") === "checkin");
     const seen = new Set();
     const out = [];
     for (const p of approved) {
