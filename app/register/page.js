@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { LoginForm } from "./LoginForm";
+import { Suspense } from "react";
+import { FaceRegistrationForm } from "./FaceRegistrationForm";
 
 export const metadata = {
-  title: "Login",
+  title: "Face Registration",
 };
 
-export default function LoginPage() {
+export default function RegisterPage() {
   return (
     <div className="relative min-h-screen w-full overflow-x-hidden overflow-y-auto bg-background font-sans text-on-background">
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
@@ -23,14 +24,28 @@ export default function LoginPage() {
         </div>
 
         <div className="mx-auto w-full min-w-0 max-w-[min(100%,26rem)] sm:max-w-[28.5rem]">
-          <LoginForm />
+          <Suspense
+            fallback={
+              <div className="glass-card w-full min-w-0 rounded-xl border border-white/10 bg-surface-container-low/40 p-10 text-center text-on-surface-variant">
+                Loading…
+              </div>
+            }
+          >
+            <FaceRegistrationForm />
+          </Suspense>
         </div>
 
         <div className="mt-10 w-full text-center">
-          <Link href="/" className="text-sm text-on-surface-variant transition hover:text-surface-tint">
-            ← Back to home
+          <Link href="/login" className="text-sm text-on-surface-variant transition hover:text-surface-tint">
+            Already registered? Login here
           </Link>
         </div>
+      </div>
+
+      <div className="pointer-events-none fixed bottom-6 left-6 z-0 hidden space-y-1 font-mono text-xs text-surface-tint opacity-30 lg:block">
+        <p>LOC_SYST: ACTIVE</p>
+        <p>LAT: 40.7128 | LONG: -74.0060</p>
+        <p>ENC_STAT: SHA-256_VERIFIED</p>
       </div>
 
       <div className="pointer-events-none fixed left-0 top-0 z-[5] h-px w-full bg-gradient-to-r from-transparent via-surface-tint/50 to-transparent" />
