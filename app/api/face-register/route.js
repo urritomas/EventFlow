@@ -1,11 +1,11 @@
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, studentId, image } = body;
+    const { name, studentId, image, eventId } = body;
 
-    if (!name || !studentId || !image) {
+    if (!name || !studentId || !image || !eventId) {
       return Response.json(
-        { error: "name, studentId, and image are required." },
+        { error: "name, studentId, eventId, and image are required." },
         { status: 400 }
       );
     }
@@ -18,6 +18,7 @@ export async function POST(request) {
     const formData = new FormData();
     formData.append("name",       name);
     formData.append("student_id", studentId);
+    formData.append("event_id",   String(eventId));
     formData.append(
       "image",
       new Blob([imageBuffer], { type: "image/png" }),

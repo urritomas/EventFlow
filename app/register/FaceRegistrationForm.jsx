@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Camera, User, IdCard, ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { createClient } from "@/utils/supabase/client";
 
 export function FaceRegistrationForm() {
   const router = useRouter();
@@ -12,6 +13,9 @@ export function FaceRegistrationForm() {
   const canvasRef = useRef(null);
   const [name, setName] = useState("");
   const [studentId, setStudentId] = useState("");
+  const [events, setEvents] = useState([]);
+  const [selectedEvent, setSelectedEvent] = useState("");
+  const [eventsLoading, setEventsLoading] = useState(true);
   const [capturedImage, setCapturedImage] = useState(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [error, setError] = useState("");
@@ -38,6 +42,41 @@ export function FaceRegistrationForm() {
     };
   }, []);
 
+  useEffect(() => {
+    const fetchEvents = async () => {
+      setEventsLoading(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("events")
+          .select("event_id, event_name")
+          .order("event_date", { ascending: true });
+
+        if (error) {
+          console.error("Error fetching events:", error);
+          setEvents([]);
+        } else {
+          const eventList = (data || []).map((event) => ({
+            event_id: event.event_id,
+            event_name: event.event_name,
+          }));
+
+          setEvents(eventList);
+          if (eventList.length > 0) {
+            setSelectedEvent(String(eventList[0].event_id));
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching events:", err);
+        setEvents([]);
+      } finally {
+        setEventsLoading(false);
+      }
+    };
+
+    fetchEvents();
+  }, []);
+
   const captureFace = () => {
     if (!videoRef.current || !canvasRef.current) return;
 
@@ -58,8 +97,8 @@ export function FaceRegistrationForm() {
     e.preventDefault();
     setError("");
 
-    if (!name || !studentId || !capturedImage) {
-      setError("Please fill all fields and capture your face.");
+    if (!name || !studentId || !capturedImage || !selectedEvent) {
+      setError("Please fill all fields, select an event, and capture your face.");
       return;
     }
 
@@ -72,6 +111,7 @@ export function FaceRegistrationForm() {
         body: JSON.stringify({
           name,
           studentId,
+          eventId: selectedEvent,
           image: capturedImage,
         }),
       });
@@ -119,6 +159,32 @@ export function FaceRegistrationForm() {
         />
 
         <div className="space-y-3">
+          <label htmlFor="event-select" className="label-caps text-on-surface-variant block px-1 font-sans">
+            Event
+          </label>
+          <select
+            id="event-select"
+            value={selectedEvent}
+            onChange={(e) => setSelectedEvent(e.target.value)}
+            disabled={eventsLoading || events.length === 0}
+            className="w-full min-w-0 rounded-lg border-0 border-b border-white/10 bg-surface-container-highest/40 py-4 px-4 font-sans text-base leading-normal text-on-surface transition-all duration-300 focus:ring-0 input-glow"
+          >
+            {events.length > 0 ? (
+              events.map((event) => (
+                <option key={event.event_id} value={String(event.event_id)}>
+                  {event.event_name}
+                </option>
+              ))
+            ) : (
+              <option value="">No events available</option>
+            )}
+          </select>
+          <p className="px-1 text-xs text-on-surface-variant/70">
+            {eventsLoading ? "Loading events…" : "Select the event you want to register for."}
+          </p>
+        </div>
+
+        <div className="space-y-3">
           <label className="block text-sm font-medium text-on-surface">Face Capture</label>
           <div className="relative mx-auto h-48 w-48 overflow-hidden rounded-lg border border-surface-tint/30 bg-black">
             {capturedImage ? (
@@ -153,7 +219,8 @@ export function FaceRegistrationForm() {
 
         <button
           type="submit"
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-surface-tint to-brand-deep py-4 text-base font-semibold text-on-secondary shadow-[0_0_18px_rgba(81,153,245,0.35)] transition duration-300 hover:shadow-[0_0_26px_rgba(81,153,245,0.55)] active:scale-[0.98] sm:text-lg"
+          disabled={eventsLoading || events.length === 0}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-surface-tint to-brand-deep py-4 text-base font-semibold text-on-secondary shadow-[0_0_18px_rgba(81,153,245,0.35)] transition duration-300 hover:shadow-[0_0_26px_rgba(81,153,245,0.55)] active:scale-[0.98] sm:text-lg disabled:cursor-not-allowed disabled:opacity-50"
         >
           <span>Register Face</span>
           <ArrowRight className="size-5" aria-hidden />

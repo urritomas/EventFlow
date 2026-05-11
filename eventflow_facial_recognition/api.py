@@ -256,16 +256,32 @@ async def register_participant(
     name:       str        = Form(...),
     student_id: str        = Form(...),
     image:      UploadFile = File(...),
+    event_id:   Optional[int] = Form(None),
 ):
     """
-    Enrolls a participant's face for the currently active event.
+    Enrolls a participant's face for a selected event.
 
     - If participant doesn't exist yet, creates them in `participants`.
     - If they already exist, reuses their participant row.
-    - Inserts a new embedding in `face_embeddings` for the active event.
+    - Inserts a new embedding in `face_embeddings` for the selected event.
     - One active embedding per participant per event.
     """
-    event = require_active_event()
+    if event_id is not None:
+        event_res = (
+            supabase.table("events")
+            .select("event_id, event_name")
+            .eq("event_id", event_id)
+            .limit(1)
+            .execute()
+        )
+        if not event_res.data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Event ID {event_id} not found."
+            )
+        event = event_res.data[0]
+    else:
+        event = require_active_event()
     event_id = event["event_id"]
 
     # Extract embedding
