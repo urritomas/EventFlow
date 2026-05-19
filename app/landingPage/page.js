@@ -1,3 +1,6 @@
+import Link from "next/link";
+import SiteHeader from "../components/SiteHeader";
+
 const benefits = [
 	{
 		title: "RFID Attendance Tracking",
@@ -93,9 +96,9 @@ function Button({ children, href, variant = "primary" }) {
 			: "border border-white/15 bg-white/8 text-white backdrop-blur hover:border-emerald-300/60 hover:bg-white/12";
 
 	return (
-		<a className={`${base} ${styles}`} href={href}>
+		<Link className={`${base} ${styles}`} href={href}>
 			{children}
-		</a>
+		</Link>
 	);
 }
 
@@ -111,9 +114,11 @@ function Card({ children, className = "" }) {
 
 export default function LandingPage() {
 	return (
-		<main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_28%),radial-gradient(circle_at_top_right,rgba(202,138,4,0.16),transparent_24%),linear-gradient(180deg,#08111f_0%,#0c1730_34%,#f4f8fb_34%,#eef4f7_100%)] text-slate-900">
+		<>
+			<SiteHeader />
+			<main className="themed-screen min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_28%),radial-gradient(circle_at_top_right,rgba(202,138,4,0.16),transparent_24%),linear-gradient(180deg,var(--hero-top)_0%,var(--hero-mid)_34%,var(--page-bg-soft)_34%,var(--page-bg)_100%)] text-[var(--foreground)]">
 			<section className="relative isolate border-b border-white/10 text-white">
-				<div className="absolute inset-0 -z-10 bg-[linear-gradient(120deg,rgba(8,17,31,0.95),rgba(11,31,58,0.92)_55%,rgba(7,24,39,0.96))]" />
+				<div className="absolute inset-0 -z-10 bg-(--hero-overlay)" />
 				<div className="absolute inset-0 -z-10 bg-[linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] bg-size-[64px_64px] opacity-40" />
 				<div className="mx-auto grid max-w-7xl gap-16 px-6 pb-20 pt-8 sm:px-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-12 lg:pb-28 lg:pt-14">
 					<div className="max-w-2xl">
@@ -126,8 +131,8 @@ export default function LandingPage() {
 							and automated certificate generation all in one powerful platform.
 						</p>
 						<div className="mt-10 flex flex-col gap-4 sm:flex-row">
-							<Button href="#cta">Get Started Today</Button>
-							<Button href="#demo" variant="secondary">
+							<Button href="/hiringDetails">Get Started Today</Button>
+							<Button href="/hiringDetails" variant="secondary">
 								Book a Demo
 							</Button>
 						</div>
@@ -154,7 +159,7 @@ export default function LandingPage() {
 								<span className="rounded-full bg-emerald-400/15 px-3 py-1 text-emerald-300">Live</span>
 							</div>
 							<div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-								<Card className="bg-slate-950/70 p-4">
+								<Card className="bg-(--hero-card) p-4">
 									<div className="flex items-center justify-between">
 										<div>
 											<p className="text-sm text-slate-400">Attendance overview</p>
@@ -180,7 +185,7 @@ export default function LandingPage() {
 								</Card>
 
 								<div className="grid gap-4">
-									<Card className="bg-white/8 p-4">
+									<Card className="bg-(--hero-card) p-4">
 										<div className="flex items-center gap-3">
 											<div className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-400/15 text-lg text-emerald-300">
 												RFID
@@ -191,7 +196,7 @@ export default function LandingPage() {
 											</div>
 										</div>
 									</Card>
-									<Card className="bg-white/8 p-4">
+									<Card className="bg-(--hero-card) p-4">
 										<div className="flex items-center gap-3">
 											<div className="grid h-11 w-11 place-items-center rounded-2xl bg-amber-400/15 text-lg text-amber-300">
 												AI
@@ -202,7 +207,7 @@ export default function LandingPage() {
 											</div>
 										</div>
 									</Card>
-									<Card className="bg-white/8 p-4">
+									<Card className="bg-(--hero-card) p-4">
 										<div className="flex items-center gap-3">
 											<div className="grid h-11 w-11 place-items-center rounded-2xl bg-sky-400/15 text-lg text-sky-300">
 												GPS
@@ -365,8 +370,8 @@ export default function LandingPage() {
 							EventFlow™.
 						</p>
 						<div className="mt-8 flex flex-col gap-4 sm:flex-row">
-							<Button href="#demo">Start Your Free Demo</Button>
-							<Button href="#contact" variant="secondary">
+							<Button href="/hiringDetails">Start Your Free Demo</Button>
+							<Button href="/hiringDetails" variant="secondary">
 								Partner With Us
 							</Button>
 						</div>
@@ -396,6 +401,7 @@ export default function LandingPage() {
 					<p className="text-slate-500">© EventFlow™ – Smarter Event Management for Modern Institutions</p>
 				</div>
 			</footer>
-		</main>
+			</main>
+		</>
 	);
 }
