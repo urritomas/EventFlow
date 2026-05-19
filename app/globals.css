@@ -329,3 +329,15 @@ body {
   background-color: #f0fdf4 !important;
   color: #047857 !important;
 }
+
+/* Login Page Light Mode Overrides */
+[data-theme="light"] .themed-screen #admin-hint,
+[data-theme="light"] .themed-screen .text-amber-900,
+[data-theme="light"] .themed-screen .bg-amber-50 {
+  background-color: #fffbeb !important;
+  color: #78350f !important;
+}
+
+[data-theme="light"] .themed-screen .text-amber-700 {
+  color: #b45309 !important;
+}
