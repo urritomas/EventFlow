@@ -37,27 +37,6 @@ const eventTypeOptions = [
 	"Other",
 ];
 
-const eventFieldLabels = [
-	["event_name", "Event name"],
-	["event_type", "Event type"],
-	["expected_attendance", "Expected attendance"],
-	["event_date", "Event date"],
-	["start_time", "Start time"],
-	["end_time", "End time"],
-	["venue_name", "Venue name"],
-	["full_address", "Full address"],
-];
-
-const tablePreview = [
-	"events",
-	"clients",
-	"participants",
-	"event_clients",
-	"attendance",
-	"attendance_report",
-	"face_embeddings",
-];
-
 function SectionLabel({ children }) {
 	return (
 		<span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/8 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-slate-200 backdrop-blur">
@@ -293,8 +272,7 @@ export default function HiringDetailsPage() {
 			</section>
 
 			<section id="hire-form" className="mx-auto max-w-7xl px-6 pb-20 sm:px-10 lg:px-12">
-				<div className="grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-					<Card className="border-slate-200 bg-white p-0 shadow-[0_18px_70px_rgba(15,23,42,0.08)]">
+				<Card className="border-slate-200 bg-white p-0 shadow-[0_18px_70px_rgba(15,23,42,0.08)]">
 						<form className="space-y-8 p-6 sm:p-8" onSubmit={handleSubmit}>
 							<div>
 								<p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">Hire request</p>
@@ -434,44 +412,9 @@ export default function HiringDetailsPage() {
 
 							<div className="flex flex-col gap-3 sm:flex-row">
 								<Button type="submit">Request a proposal</Button>
-								<Button href="#table-map" variant="secondary">
-									See schema mapping
-								</Button>
 							</div>
 						</form>
 					</Card>
-
-					<div className="grid gap-4 self-start">
-						<Card id="table-map" className="border-slate-200 bg-white p-0 shadow-[0_18px_70px_rgba(15,23,42,0.08)]">
-							<div className="border-b border-slate-200 px-6 py-5">
-								<p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">Schema preview</p>
-								<h3 className="mt-2 text-xl font-semibold text-slate-950">Event fields we’ll keep aligned</h3>
-							</div>
-							<div className="grid gap-3 p-6">
-								{eventFieldLabels.map(([key, label]) => (
-									<div key={key} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm">
-										<span className="font-medium text-slate-900">{label}</span>
-										<span className="font-mono text-slate-500">{key}</span>
-									</div>
-								))}
-							</div>
-						</Card>
-
-						<Card className="border-slate-200 bg-white p-0 shadow-[0_18px_70px_rgba(15,23,42,0.08)]">
-							<div className="border-b border-slate-200 px-6 py-5">
-								<p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">Planned tables</p>
-								<h3 className="mt-2 text-xl font-semibold text-slate-950">Keep this data model in mind</h3>
-							</div>
-							<div className="flex flex-wrap gap-2 p-6">
-								{tablePreview.map((table) => (
-									<span key={table} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-										{table}
-									</span>
-								))}
-							</div>
-						</Card>
-					</div>
-				</div>
 			</section>
 			</main>
 		</>

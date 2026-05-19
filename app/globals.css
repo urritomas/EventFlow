@@ -317,3 +317,15 @@ body {
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.92) 0%, rgba(8, 17, 31, 0.96) 100%) !important;
   color: var(--foreground) !important;
 }
+
+/* Hire Request Page - Light Mode Fixes */
+[data-theme="light"] .themed-screen .text-emerald-100,
+[data-theme="light"] .themed-screen .text-emerald-200,
+[data-theme="light"] .themed-screen .text-emerald-300 {
+  color: #10b981 !important;
+}
+
+[data-theme="light"] .themed-screen .bg-emerald-50 {
+  background-color: #f0fdf4 !important;
+  color: #047857 !important;
+}
