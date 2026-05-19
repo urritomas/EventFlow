@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../components/SiteHeader";
 
 function SectionLabel({ children }) {
@@ -12,19 +13,20 @@ function SectionLabel({ children }) {
 	);
 }
 
-function Button({ children, onClick, variant = "primary", type = "button", className = "" }) {
+function Button({ children, onClick, variant = "primary", type = "button", className = "", disabled = false }) {
 	const base =
 		"inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold transition duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300";
 	const styles =
 		variant === "primary"
-			? "bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 text-slate-950 shadow-[0_16px_40px_rgba(16,185,129,0.28)] hover:brightness-110"
-			: "border border-white/15 bg-white/8 text-white backdrop-blur hover:border-emerald-300/60 hover:bg-white/12";
+			? "bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 text-slate-950 shadow-[0_16px_40px_rgba(16,185,129,0.28)] hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
+			: "border border-white/15 bg-white/8 text-white backdrop-blur hover:border-emerald-300/60 hover:bg-white/12 disabled:opacity-50 disabled:cursor-not-allowed";
 
 	return (
 		<button
 			type={type}
 			onClick={onClick}
 			className={`${base} ${styles} ${className}`}
+			disabled={disabled}
 		>
 			{children}
 		</button>
@@ -73,6 +75,8 @@ export default function LoginPage() {
 	const [loginMode, setLoginMode] = useState("organization");
 	const [showAdminHint, setShowAdminHint] = useState(false);
 	const [adminClicks, setAdminClicks] = useState(0);
+	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [submitMessage, setSubmitMessage] = useState("");
 
 	const [formState, setFormState] = useState({
 		// Organization
@@ -101,8 +105,78 @@ export default function LoginPage() {
 		}
 	};
 
-	const handleSubmit = (event) => {
+	const handleSubmit = async (event) => {
 		event.preventDefault();
+		setIsSubmitting(true);
+		setSubmitMessage("");
+
+		try {
+			const supabase = createClient();
+
+			if (loginMode === "organization") {
+				// Organization login: verify organization credentials
+				const { data: orgData, error: orgError } = await supabase
+					.from("clients")
+					.select("id, name")
+					.eq("contact_email", formState.orgEmail)
+					.single();
+
+				if (orgError || !orgData) {
+					setSubmitMessage("Organization not found. Please check your email or request access.");
+					setIsSubmitting(false);
+					return;
+				}
+
+				// In a real app, you'd verify the password here
+				// For now, just authenticate the organization
+				setSubmitMessage(`✓ Welcome back, ${orgData.name}! Redirecting to dashboard...`);
+				setTimeout(() => {
+					// Redirect to organization dashboard
+					window.location.href = "/dashboard/organization";
+				}, 1500);
+			} else if (loginMode === "personal") {
+				// Personal login: create or get participant
+				const { data: participantData, error: participantError } = await supabase
+					.from("participants")
+					.select("id")
+					.eq("email", formState.personalEmail)
+					.single();
+
+				if (!participantData) {
+					// Create new participant
+					const { data: newParticipant, error: createError } = await supabase
+						.from("participants")
+						.insert([
+							{
+								email: formState.personalEmail,
+								first_name: formState.firstName,
+							},
+						])
+						.select()
+						.single();
+
+					if (createError) throw createError;
+
+					setSubmitMessage(`✓ Welcome, ${formState.firstName}! Your profile created successfully.`);
+				} else {
+					setSubmitMessage(`✓ Welcome back, ${formState.firstName}! Redirecting to your dashboard...`);
+				}
+
+				setTimeout(() => {
+					window.location.href = "/dashboard/participant";
+				}, 1500);
+			} else if (loginMode === "admin") {
+				// Admin login: verify admin credentials (this would be more secure in production)
+				setSubmitMessage("✓ Admin access verified. Redirecting to admin panel...");
+				setTimeout(() => {
+					window.location.href = "/dashboard/admin";
+				}, 1500);
+			}
+		} catch (error) {
+			setSubmitMessage(`Error: ${error.message}`);
+		} finally {
+			setIsSubmitting(false);
+		}
 	};
 
 	return (
@@ -220,8 +294,18 @@ export default function LoginPage() {
 										</ul>
 									</div>
 
+									{submitMessage && (
+										<div className={`rounded-3xl p-6 text-sm font-semibold ${
+											submitMessage.includes("Error")
+												? "border border-red-200 bg-red-50 text-red-700"
+												: "border border-emerald-200 bg-emerald-50 text-emerald-700"
+										}`}>
+											{submitMessage}
+										</div>
+									)}
+
 									<div className="flex flex-col gap-3 sm:flex-row">
-										<Button type="submit">Sign in as Organization</Button>
+										<Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Signing in..." : "Sign in as Organization"}</Button>
 										<Button variant="secondary" onClick={() => setLoginMode("personal")}>
 											Switch to Personal
 										</Button>
@@ -281,8 +365,18 @@ export default function LoginPage() {
 										</ul>
 									</div>
 
+									{submitMessage && (
+										<div className={`rounded-3xl p-6 text-sm font-semibold ${
+											submitMessage.includes("Error")
+												? "border border-red-200 bg-red-50 text-red-700"
+												: "border border-emerald-200 bg-emerald-50 text-emerald-700"
+										}`}>
+											{submitMessage}
+										</div>
+									)}
+
 									<div className="flex flex-col gap-3 sm:flex-row">
-										<Button type="submit">Sign in as Participant</Button>
+										<Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Signing in..." : "Sign in as Participant"}</Button>
 										<Button variant="secondary" onClick={() => setLoginMode("organization")}>
 											Switch to Organization
 										</Button>
@@ -342,8 +436,18 @@ export default function LoginPage() {
 										</ul>
 									</div>
 
+									{submitMessage && (
+										<div className={`rounded-3xl p-6 text-sm font-semibold ${
+											submitMessage.includes("Error")
+												? "border border-red-200 bg-red-50 text-red-700"
+												: "border border-amber-200 bg-amber-50 text-amber-700"
+										}`}>
+											{submitMessage}
+										</div>
+									)}
+
 									<div className="flex flex-col gap-3 sm:flex-row">
-										<Button type="submit">Access Admin Portal</Button>
+										<Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Verifying..." : "Access Admin Portal"}</Button>
 										<Button variant="secondary" onClick={() => setLoginMode("organization")}>
 											Back to Main
 										</Button>

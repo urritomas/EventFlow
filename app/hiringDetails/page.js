@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../components/SiteHeader";
 
 const serviceOptions = [
@@ -46,13 +47,13 @@ function SectionLabel({ children }) {
 	);
 }
 
-function Button({ children, href, variant = "primary", type = "button" }) {
+function Button({ children, href, variant = "primary", type = "button", disabled = false }) {
 	const base =
 		"inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold transition duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300";
 	const styles =
 		variant === "primary"
-			? "bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 text-slate-950 shadow-[0_16px_40px_rgba(16,185,129,0.28)] hover:brightness-110"
-			: "border border-white/15 bg-white/8 text-white backdrop-blur hover:border-emerald-300/60 hover:bg-white/12";
+			? "bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 text-slate-950 shadow-[0_16px_40px_rgba(16,185,129,0.28)] hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
+			: "border border-white/15 bg-white/8 text-white backdrop-blur hover:border-emerald-300/60 hover:bg-white/12 disabled:opacity-50 disabled:cursor-not-allowed";
 
 	if (href) {
 		return (
@@ -63,7 +64,7 @@ function Button({ children, href, variant = "primary", type = "button" }) {
 	}
 
 	return (
-		<button type={type} className={`${base} ${styles}`}>
+		<button type={type} className={`${base} ${styles}`} disabled={disabled}>
 			{children}
 		</button>
 	);
@@ -110,6 +111,8 @@ export default function HiringDetailsPage() {
 		geofencing: true,
 		facialRecognition: false,
 	});
+	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [submitMessage, setSubmitMessage] = useState("");
 
 	const selectedServices = serviceOptions.filter((service) => formState[service.key]);
 
@@ -134,8 +137,85 @@ export default function HiringDetailsPage() {
 		setFormState((current) => ({ ...current, [field]: value }));
 	};
 
-	const handleSubmit = (event) => {
+	const handleSubmit = async (event) => {
 		event.preventDefault();
+		setIsSubmitting(true);
+		setSubmitMessage("");
+
+		try {
+			const supabase = createClient();
+
+			// 1. Create or get client (organization)
+			const { data: clientData, error: clientError } = await supabase
+				.from("clients")
+				.insert([
+					{
+						name: formState.organization,
+						contact_email: formState.email,
+						contact_name: formState.fullName,
+						contact_phone: formState.phone,
+					},
+				])
+				.select();
+
+			if (clientError) throw clientError;
+
+			const clientId = clientData[0].id;
+
+			// 2. Create event in events table
+			const services = {
+				rfid: formState.rfid,
+				geofencing: formState.geofencing,
+				facialRecognition: formState.facialRecognition,
+			};
+
+			const { data: eventData, error: eventError } = await supabase
+				.from("events")
+				.insert([
+					{
+						name: formState.eventName,
+						type: formState.eventType,
+						client_id: clientId,
+						expected_attendance: parseInt(formState.expectedAttendance) || 0,
+						event_date: formState.eventDate,
+						start_time: formState.startTime,
+						end_time: formState.endTime,
+						venue_name: formState.venueName,
+						full_address: formState.fullAddress,
+						services: services,
+						notes: formState.notes,
+						estimated_scope: estimatedScope,
+						status: "pending_approval",
+					},
+				])
+				.select();
+
+			if (eventError) throw eventError;
+
+			setSubmitMessage("✓ Request submitted successfully! We'll review and contact you soon.");
+			setFormState({
+				fullName: "",
+				organization: "",
+				email: "",
+				phone: "",
+				eventName: "",
+				eventType: "Conference",
+				expectedAttendance: "",
+				eventDate: "",
+				startTime: "",
+				endTime: "",
+				venueName: "",
+				fullAddress: "",
+				notes: "",
+				rfid: true,
+				geofencing: true,
+				facialRecognition: false,
+			});
+		} catch (error) {
+			setSubmitMessage(`Error: ${error.message}`);
+		} finally {
+			setIsSubmitting(false);
+		}
 	};
 
 	return (
@@ -410,8 +490,20 @@ export default function HiringDetailsPage() {
 								/>
 							</Field>
 
+							{submitMessage && (
+								<div className={`rounded-3xl p-6 text-sm font-semibold ${
+									submitMessage.includes("Error")
+										? "border border-red-200 bg-red-50 text-red-700"
+										: "border border-emerald-200 bg-emerald-50 text-emerald-700"
+								}`}>
+									{submitMessage}
+								</div>
+							)}
+
 							<div className="flex flex-col gap-3 sm:flex-row">
-								<Button type="submit">Request a proposal</Button>
+								<Button type="submit" disabled={isSubmitting}>
+									{isSubmitting ? "Submitting..." : "Request a proposal"}
+								</Button>
 							</div>
 						</form>
 					</Card>
