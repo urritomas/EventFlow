@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import Link from "next/link";
 import SiteHeader from "../components/SiteHeader";
+import bcrypt from "bcryptjs";
 
 function SectionLabel({ children }) {
 	return (
@@ -80,13 +82,11 @@ export default function LoginPage() {
 
 	const [formState, setFormState] = useState({
 		// Organization
-		orgEmail: "",
+		orgUsername: "",
 		orgPassword: "",
-		orgName: "",
 		// Personal
-		personalEmail: "",
+		personalUsername: "",
 		personalPassword: "",
-		firstName: "",
 		// Admin
 		adminEmail: "",
 		adminPassword: "",
@@ -114,59 +114,109 @@ export default function LoginPage() {
 			const supabase = createClient();
 
 			if (loginMode === "organization") {
-				// Organization login: verify organization credentials
-				const { data: orgData, error: orgError } = await supabase
-					.from("clients")
-					.select("id, name")
-					.eq("contact_email", formState.orgEmail)
-					.single();
-
-				if (orgError || !orgData) {
-					setSubmitMessage("Organization not found. Please check your email or request access.");
+				// Organization login
+				if (!formState.orgUsername || !formState.orgPassword) {
+					setSubmitMessage("Please enter your username and password.");
 					setIsSubmitting(false);
 					return;
 				}
 
-				// In a real app, you'd verify the password here
-				// For now, just authenticate the organization
-				setSubmitMessage(`✓ Welcome back, ${orgData.name}! Redirecting to dashboard...`);
+				// Get user from login_details with login_type 1 (organization)
+				const { data: loginData, error: loginError } = await supabase
+					.from("login_details")
+					.select("*")
+					.eq("username", formState.orgUsername)
+					.eq("login_type", 1);
+
+				if (loginError || !loginData || loginData.length === 0) {
+					setSubmitMessage("Invalid username or password.");
+					setIsSubmitting(false);
+					return;
+				}
+
+				const orgUser = loginData[0];
+
+				// Verify password using bcrypt
+				const passwordMatch = await bcrypt.compare(formState.orgPassword, orgUser.hashed_password);
+
+				if (!passwordMatch) {
+					setSubmitMessage("Invalid username or password.");
+					setIsSubmitting(false);
+					return;
+				}
+
+				setSubmitMessage(`✓ Welcome back, ${orgUser.org_name}! Redirecting to dashboard...`);
 				setTimeout(() => {
-					// Redirect to organization dashboard
 					window.location.href = "/dashboard/organization";
 				}, 1500);
 			} else if (loginMode === "personal") {
-				// Personal login: create or get participant
-				const { data: participantData, error: participantError } = await supabase
-					.from("participants")
-					.select("id")
-					.eq("email", formState.personalEmail)
-					.single();
-
-				if (!participantData) {
-					// Create new participant
-					const { data: newParticipant, error: createError } = await supabase
-						.from("participants")
-						.insert([
-							{
-								email: formState.personalEmail,
-								first_name: formState.firstName,
-							},
-						])
-						.select()
-						.single();
-
-					if (createError) throw createError;
-
-					setSubmitMessage(`✓ Welcome, ${formState.firstName}! Your profile created successfully.`);
-				} else {
-					setSubmitMessage(`✓ Welcome back, ${formState.firstName}! Redirecting to your dashboard...`);
+				// Personal login
+				if (!formState.personalUsername || !formState.personalPassword) {
+					setSubmitMessage("Please enter your username and password.");
+					setIsSubmitting(false);
+					return;
 				}
 
+				// Get user from login_details with login_type 2 (personal)
+				const { data: loginData, error: loginError } = await supabase
+					.from("login_details")
+					.select("*")
+					.eq("username", formState.personalUsername)
+					.eq("login_type", 2);
+
+				if (loginError || !loginData || loginData.length === 0) {
+					setSubmitMessage("Invalid username or password.");
+					setIsSubmitting(false);
+					return;
+				}
+
+				const personalUser = loginData[0];
+
+				// Verify password using bcrypt
+				const passwordMatch = await bcrypt.compare(formState.personalPassword, personalUser.hashed_password);
+
+				if (!passwordMatch) {
+					setSubmitMessage("Invalid username or password.");
+					setIsSubmitting(false);
+					return;
+				}
+
+				setSubmitMessage(`✓ Welcome back, ${personalUser.first_name}! Redirecting to your dashboard...`);
 				setTimeout(() => {
 					window.location.href = "/dashboard/participant";
 				}, 1500);
 			} else if (loginMode === "admin") {
-				// Admin login: verify admin credentials (this would be more secure in production)
+				// Admin login
+				if (!formState.adminEmail || !formState.adminPassword) {
+					setSubmitMessage("Please enter your email and password.");
+					setIsSubmitting(false);
+					return;
+				}
+
+				// Get admin user from login_details with login_type 3 (admin)
+				const { data: loginData, error: loginError } = await supabase
+					.from("login_details")
+					.select("*")
+					.eq("email_address", formState.adminEmail)
+					.eq("login_type", 3);
+
+				if (loginError || !loginData || loginData.length === 0) {
+					setSubmitMessage("Invalid email or password.");
+					setIsSubmitting(false);
+					return;
+				}
+
+				const adminUser = loginData[0];
+
+				// Verify password using bcrypt
+				const passwordMatch = await bcrypt.compare(formState.adminPassword, adminUser.hashed_password);
+
+				if (!passwordMatch) {
+					setSubmitMessage("Invalid email or password.");
+					setIsSubmitting(false);
+					return;
+				}
+
 				setSubmitMessage("✓ Admin access verified. Redirecting to admin panel...");
 				setTimeout(() => {
 					window.location.href = "/dashboard/admin";
@@ -236,6 +286,15 @@ export default function LoginPage() {
 								</div>
 							)}
 						</div>
+
+						<div className="mx-auto mt-8 max-w-4xl text-center">
+							<p className="text-sm text-slate-400">
+								Don't have an account?{" "}
+								<Link href="/register" className="text-emerald-400 hover:text-emerald-300 font-semibold transition-colors">
+									Create one here
+								</Link>
+							</p>
+						</div>
 					</div>
 				</section>
 
@@ -249,30 +308,19 @@ export default function LoginPage() {
 										<p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">Organization</p>
 										<h3 className="mt-3 text-2xl font-semibold text-slate-950">Event Manager Access</h3>
 										<p className="mt-2 text-sm leading-6 text-slate-600">
-											Create and manage events with secure authentication.
+											Sign in with your organization credentials.
 										</p>
 									</div>
 
-									<div className="grid gap-5 sm:grid-cols-2">
-										<Field label="Organization Name">
-											<input
-												type="text"
-												value={formState.orgName}
-												onChange={updateField("orgName")}
-												placeholder="Your institution or company"
-												className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
-											/>
-										</Field>
-										<Field label="Contact Email">
-											<input
-												type="email"
-												value={formState.orgEmail}
-												onChange={updateField("orgEmail")}
-												placeholder="name@organization.com"
-												className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
-											/>
-										</Field>
-									</div>
+									<Field label="Username">
+										<input
+											type="text"
+											value={formState.orgUsername}
+											onChange={updateField("orgUsername")}
+											placeholder="Your organization username"
+											className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
+										/>
+									</Field>
 
 									<Field label="Password">
 										<input
@@ -296,7 +344,7 @@ export default function LoginPage() {
 
 									{submitMessage && (
 										<div className={`rounded-3xl p-6 text-sm font-semibold ${
-											submitMessage.includes("Error")
+											submitMessage.includes("Error") || submitMessage.includes("Invalid")
 												? "border border-red-200 bg-red-50 text-red-700"
 												: "border border-emerald-200 bg-emerald-50 text-emerald-700"
 										}`}>
@@ -320,30 +368,19 @@ export default function LoginPage() {
 										<p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">Personal</p>
 										<h3 className="mt-3 text-2xl font-semibold text-slate-950">Participant Access</h3>
 										<p className="mt-2 text-sm leading-6 text-slate-600">
-											Register your biometrics and access events you're invited to.
+											Sign in to access events and manage your biometrics.
 										</p>
 									</div>
 
-									<div className="grid gap-5 sm:grid-cols-2">
-										<Field label="First Name">
-											<input
-												type="text"
-												value={formState.firstName}
-												onChange={updateField("firstName")}
-												placeholder="Your first name"
-												className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
-											/>
-										</Field>
-										<Field label="Email">
-											<input
-												type="email"
-												value={formState.personalEmail}
-												onChange={updateField("personalEmail")}
-												placeholder="you@example.com"
-												className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
-											/>
-										</Field>
-									</div>
+									<Field label="Username">
+										<input
+											type="text"
+											value={formState.personalUsername}
+											onChange={updateField("personalUsername")}
+											placeholder="Your username"
+											className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
+										/>
+									</Field>
 
 									<Field label="Password">
 										<input
@@ -367,7 +404,7 @@ export default function LoginPage() {
 
 									{submitMessage && (
 										<div className={`rounded-3xl p-6 text-sm font-semibold ${
-											submitMessage.includes("Error")
+											submitMessage.includes("Error") || submitMessage.includes("Invalid")
 												? "border border-red-200 bg-red-50 text-red-700"
 												: "border border-emerald-200 bg-emerald-50 text-emerald-700"
 										}`}>
@@ -388,35 +425,24 @@ export default function LoginPage() {
 							{loginMode === "admin" && (
 								<>
 									<div>
-										<p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">Admin</p>
+										<p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-700">Admin</p>
 										<h3 className="mt-3 text-2xl font-semibold text-slate-950">Developer Portal</h3>
 										<p className="mt-2 text-sm leading-6 text-slate-600">
 											Review and approve event requests from organizations.
 										</p>
 									</div>
 
-									<div className="grid gap-5 sm:grid-cols-2">
-										<Field label="Admin Email">
-											<input
-												type="email"
-												value={formState.adminEmail}
-												onChange={updateField("adminEmail")}
-												placeholder="admin@eventflow.dev"
-												className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
-											/>
-										</Field>
-										<Field label="Admin Code">
-											<input
-												type="password"
-												value={formState.adminCode}
-												onChange={updateField("adminCode")}
-												placeholder="••••••••"
-												className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
-											/>
-										</Field>
-									</div>
+									<Field label="Admin Email">
+										<input
+											type="email"
+											value={formState.adminEmail}
+											onChange={updateField("adminEmail")}
+											placeholder="admin@eventflow.dev"
+											className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
+										/>
+									</Field>
 
-									<Field label="Master Password">
+									<Field label="Password">
 										<input
 											type="password"
 											value={formState.adminPassword}
@@ -438,7 +464,7 @@ export default function LoginPage() {
 
 									{submitMessage && (
 										<div className={`rounded-3xl p-6 text-sm font-semibold ${
-											submitMessage.includes("Error")
+											submitMessage.includes("Error") || submitMessage.includes("Invalid")
 												? "border border-red-200 bg-red-50 text-red-700"
 												: "border border-amber-200 bg-amber-50 text-amber-700"
 										}`}>
