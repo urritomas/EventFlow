@@ -145,55 +145,51 @@ export default function HiringDetailsPage() {
 		try {
 			const supabase = createClient();
 
-			// 1. Create or get client (organization)
-			const { data: clientData, error: clientError } = await supabase
-				.from("clients")
-				.insert([
-					{
-						name: formState.organization,
-						contact_email: formState.email,
-						contact_name: formState.fullName,
-						contact_phone: formState.phone,
-					},
-				])
-				.select();
+		// Save application to applications table
+		const { data: appData, error: appError } = await supabase
+			.from("applications")
+			.insert([{
+				full_name: formState.fullName,
+				organization_name: formState.organization,
+				email: formState.email,
+				phone: formState.phone,
+				event_name: formState.eventName,
+				event_type: formState.eventType,
+				expected_attendance: parseInt(formState.expectedAttendance) || 0,
+				event_date: formState.eventDate,
+				start_time: formState.startTime,
+				end_time: formState.endTime,
+				venue_name: formState.venueName,
+				full_address: formState.fullAddress,
+				notes: formState.notes,
+				services_needed: {
+					rfid: formState.rfid,
+					geofencing: formState.geofencing,
+					facial_recognition: formState.facialRecognition,
+				},
+				estimated_scope: estimatedScope,
+				status: "pending",
+				created_at: new Date().toISOString(),
+			}])
+			.select();
 
-			if (clientError) throw clientError;
+		if (appError) throw appError;
 
-			const clientId = clientData[0].id;
+		// Also create or get client (organization)
+		const { data: clientData, error: clientError } = await supabase
+			.from("clients")
+			.insert([{
+				name: formState.organization,
+				contact_email: formState.email,
+				contact_name: formState.fullName,
+				contact_phone: formState.phone,
+			}])
+			.select();
 
-			// 2. Create event in events table
-			const services = {
-				rfid: formState.rfid,
-				geofencing: formState.geofencing,
-				facialRecognition: formState.facialRecognition,
-			};
+		if (clientError) throw clientError;
 
-			const { data: eventData, error: eventError } = await supabase
-				.from("events")
-				.insert([
-					{
-						name: formState.eventName,
-						type: formState.eventType,
-						client_id: clientId,
-						expected_attendance: parseInt(formState.expectedAttendance) || 0,
-						event_date: formState.eventDate,
-						start_time: formState.startTime,
-						end_time: formState.endTime,
-						venue_name: formState.venueName,
-						full_address: formState.fullAddress,
-						services: services,
-						notes: formState.notes,
-						estimated_scope: estimatedScope,
-						status: "pending_approval",
-					},
-				])
-				.select();
-
-			if (eventError) throw eventError;
-
-			setSubmitMessage("✓ Request submitted successfully! We'll review and contact you soon.");
-			setFormState({
+		setSubmitMessage("Application submitted successfully! We'll review your hiring request and contact you soon.");
+		setFormState({
 				fullName: "",
 				organization: "",
 				email: "",

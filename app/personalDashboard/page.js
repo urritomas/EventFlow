@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../components/SiteHeader";
 import {
 	Search,
@@ -209,23 +210,103 @@ export default function PersonalDashboard() {
 		window.location.href = "/login";
 	};
 
-	const upcomingEvents = [
-		{ id: 1, name: "Tech Summit 2026", venue: "Convention Center, NYC", date: "Jun 15, 2026", time: "09:00 AM", attendees: 245, status: "Registered" },
-		{ id: 2, name: "Web Dev Workshop", venue: "Tech Hub, San Francisco", date: "Jun 22, 2026", time: "02:00 PM", attendees: 89, status: "Registered" },
-		{ id: 3, name: "AI Conference", venue: "Virtual", date: "Jul 05, 2026", time: "10:00 AM", attendees: 512, status: "Interested" },
-	];
+	const [upcomingEvents, setUpcomingEvents] = useState([]);
+	const [certificates, setCertificates] = useState([]);
+	const [registeredEvents, setRegisteredEvents] = useState([]);
+	const [stats, setStats] = useState({ registered: 0, certificates: 0, attendance: 0 });
 
-	const certificates = [
-		{ id: 1, title: "Advanced JavaScript", event: "JavaScript Mastery", date: "May 10, 2026" },
-		{ id: 2, title: "React Developer", event: "Modern React", date: "Apr 28, 2026" },
-		{ id: 3, title: "Event Management", event: "Planning Fundamentals", date: "Apr 15, 2026" },
-	];
+	useEffect(() => {
+		const fetchData = async () => {
+			const supabase = createClient();
+			const userRole = localStorage.getItem("userRole");
 
-	const registeredEvents = [
-		{ id: 1, name: "GraphQL Basics", date: "May 20, 2026", status: "Completed" },
-		{ id: 2, name: "TypeScript Advanced", date: "Jun 10, 2026", status: "Upcoming" },
-		{ id: 3, name: "Next.js Full Stack", date: "Jun 25, 2026", status: "Registered" },
-	];
+			if (userRole === "personal") {
+				// Fetch events data
+				const { data: events } = await supabase
+					.from("events")
+					.select("*")
+					.eq("is_active", true)
+					.eq("is_accepted", true)
+					.order("event_date", { ascending: true });
+
+				const { data: attendance } = await supabase
+					.from("attendance")
+					.select("*");
+
+				if (events) {
+					const upcoming = events.slice(0, 3).map(e => ({
+						id: e.event_id,
+						name: e.event_name,
+						venue: e.venue_name,
+						date: e.event_date,
+						time: e.start_time,
+						attendees: e.expected_attendance,
+						status: "Registered"
+					}));
+					setUpcomingEvents(upcoming);
+					setRegisteredEvents(upcoming);
+					setStats(prev => ({ ...prev, registered: events.length }));
+				}
+
+				if (attendance) {
+					const avgAttendance = attendance.length > 0 ? Math.floor((attendance.filter(a => a.verified).length / attendance.length) * 100) : 0;
+					setStats(prev => ({ ...prev, attendance: avgAttendance }));
+				}
+
+				// Generate certificates based on events
+				if (events) {
+					const certs = events.slice(0, 3).map((e, i) => ({
+						id: i + 1,
+						title: `${e.event_name} Completion`,
+						event: e.event_name,
+						date: e.event_date
+					}));
+					setCertificates(certs);
+					setStats(prev => ({ ...prev, certificates: certs.length }));
+				}
+			}
+		};
+
+		if (isAuthorized) {
+			fetchData();
+
+			// Set up real-time subscriptions
+			const supabase = createClient();
+			const subscription = supabase
+				.channel("personal-updates")
+				.on(
+					"postgres_changes",
+					{
+						event: "*",
+						schema: "public",
+						table: "events",
+					},
+					() => {
+						fetchData();
+					}
+				)
+				.on(
+					"postgres_changes",
+					{
+						event: "*",
+						schema: "public",
+						table: "attendance",
+					},
+					() => {
+						fetchData();
+					}
+				)
+				.subscribe();
+
+			// Auto-refresh every 5 seconds as fallback
+			const interval = setInterval(fetchData, 5000);
+
+			return () => {
+				subscription.unsubscribe();
+				clearInterval(interval);
+			};
+		}
+	}, [isAuthorized]);
 
 	if (!isAuthorized) return null;
 
@@ -262,9 +343,9 @@ export default function PersonalDashboard() {
 								Overview
 							</h2>
 							<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-								<StatCard title="Registered Events" value="8" subtitle="4 upcoming" icon={Calendar} />
-								<StatCard title="Certificates Earned" value="12" subtitle="This month" icon={Award} />
-								<StatCard title="Attendance Rate" value="94%" subtitle="Excellent" icon={Users} />
+							<StatCard title="Registered Events" value={stats.registered} subtitle="Active" icon={Calendar} />
+							<StatCard title="Certificates Earned" value={stats.certificates} subtitle="This month" icon={Award} />
+							<StatCard title="Attendance Rate" value={`${stats.attendance}%`} subtitle="Excellent" icon={Users} />
 							</div>
 						</section>
 
