@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import SiteHeader from "../components/SiteHeader";
 import {
 	BarChart3,
@@ -133,9 +134,22 @@ function StatCard({ title, value, subtitle, icon: Icon }) {
 }
 
 export default function OrgDashboard() {
+	const router = useRouter();
 	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const [isAuthorized, setIsAuthorized] = useState(false);
+
+	useEffect(() => {
+		const isLoggedIn = localStorage.getItem("isLoggedIn");
+		if (!isLoggedIn) {
+			router.push("/landingPage");
+		} else {
+			setIsAuthorized(true);
+		}
+	}, [router]);
 
 	const handleLogout = () => {
+		localStorage.removeItem("isLoggedIn");
+		localStorage.removeItem("userRole");
 		setSidebarOpen(false);
 		window.location.href = "/login";
 	};
@@ -158,6 +172,8 @@ export default function OrgDashboard() {
 		{ id: 2, name: "Jane Smith", email: "jane@example.com", eligible: true },
 		{ id: 3, name: "Alice Brown", email: "alice@example.com", eligible: true },
 	];
+
+	if (!isAuthorized) return null;
 
 	return (
 		<div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import SiteHeader from "../components/SiteHeader";
 import {
 	BarChart3,
@@ -132,16 +133,33 @@ function StatCard({ title, value, trend, icon: Icon }) {
 }
 
 export default function AdminDashboard() {
+	const router = useRouter();
 	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const [isAuthorized, setIsAuthorized] = useState(false);
+
+	useEffect(() => {
+		const isLoggedIn = localStorage.getItem("isLoggedIn");
+		const userRole = localStorage.getItem("userRole");
+		if (!isLoggedIn || userRole !== "admin") {
+			router.push("/landingPage");
+		} else {
+			setIsAuthorized(true);
+		}
+	}, [router]);
+
+	const handleLogout = () => {
+		localStorage.removeItem("isLoggedIn");
+		localStorage.removeItem("userRole");
+		setSidebarOpen(false);
+		window.location.href = "/login";
+	};
+
 	const [eventApprovals, setEventApprovals] = useState([
 		{ id: 1, name: "Tech Summit 2026", organizer: "TechEvents Inc", date: "Jun 15, 2026", participants: 250 },
 		{ id: 2, name: "Web Dev Workshop", organizer: "CodeAcademy", date: "Jun 22, 2026", participants: 45 },
 	]);
 
-	const handleLogout = () => {
-		setSidebarOpen(false);
-		window.location.href = "/login";
-	};
+
 
 	const approveEvent = (id) => {
 		setEventApprovals(eventApprovals.filter((e) => e.id !== id));
@@ -162,6 +180,8 @@ export default function AdminDashboard() {
 		{ id: 3, name: "Bob Wilson", email: "bob@example.com", type: "Participant", status: "Inactive" },
 		{ id: 4, name: "Alice Brown", email: "alice@example.com", type: "Organizer", status: "Active" },
 	];
+
+	if (!isAuthorized) return null;
 
 	return (
 		<div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>

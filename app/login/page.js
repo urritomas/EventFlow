@@ -146,6 +146,8 @@ export default function LoginPage() {
 					return;
 				}
 
+				localStorage.setItem("isLoggedIn", "true");
+				localStorage.setItem("userRole", "organization");
 				setSubmitMessage(`Welcome back, ${orgUser.org_name}! Redirecting to dashboard...`);
 				setTimeout(() => {
 					window.location.href = "/orgDashboard";
@@ -182,6 +184,8 @@ export default function LoginPage() {
 					return;
 				}
 
+				localStorage.setItem("isLoggedIn", "true");
+				localStorage.setItem("userRole", "personal");
 				setSubmitMessage(`Welcome back, ${personalUser.first_name}! Redirecting to your dashboard...`);
 				setTimeout(() => {
 					window.location.href = "/personalDashboard";
@@ -218,6 +222,8 @@ export default function LoginPage() {
 					return;
 				}
 
+				localStorage.setItem("isLoggedIn", "true");
+				localStorage.setItem("userRole", "admin");
 				setSubmitMessage("Admin access verified. Redirecting to admin panel...");
 				setTimeout(() => {
 					window.location.href = "/adminDashboard";
@@ -280,7 +286,7 @@ export default function LoginPage() {
 									<LoginModeButton
 										mode="admin"
 										label="Admin Portal"
-										icon="🔑"
+										icon={Lock}
 										isActive={loginMode === "admin"}
 										onClick={() => setLoginMode("admin")}
 									/>

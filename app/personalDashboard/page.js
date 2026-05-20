@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import SiteHeader from "../components/SiteHeader";
 import {
 	Search,
@@ -188,9 +189,22 @@ function EventCard({ event }) {
 }
 
 export default function PersonalDashboard() {
+	const router = useRouter();
 	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const [isAuthorized, setIsAuthorized] = useState(false);
+
+	useEffect(() => {
+		const isLoggedIn = localStorage.getItem("isLoggedIn");
+		if (!isLoggedIn) {
+			router.push("/landingPage");
+		} else {
+			setIsAuthorized(true);
+		}
+	}, [router]);
 
 	const handleLogout = () => {
+		localStorage.removeItem("isLoggedIn");
+		localStorage.removeItem("userRole");
 		setSidebarOpen(false);
 		window.location.href = "/login";
 	};
@@ -212,6 +226,8 @@ export default function PersonalDashboard() {
 		{ id: 2, name: "TypeScript Advanced", date: "Jun 10, 2026", status: "Upcoming" },
 		{ id: 3, name: "Next.js Full Stack", date: "Jun 25, 2026", status: "Registered" },
 	];
+
+	if (!isAuthorized) return null;
 
 	return (
 		<div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>
