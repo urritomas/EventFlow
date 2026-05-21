@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../components/SiteHeader";
@@ -162,20 +162,29 @@ export default function AdminDashboard() {
 	const [stats, setStats] = useState({ totalEvents: 0, pendingApprovals: 0, registeredUsers: 0, activeOrgs: 0 });
 	const [currentSection, setCurrentSection] = useState("dashboard");
 	const [editingEvent, setEditingEvent] = useState(null);
+	const [editMode, setEditMode] = useState("view"); // "view" or "edit"
 	const [allEvents, setAllEvents] = useState([]);
 
-	useEffect(() => {
-		const fetchData = async () => {
-			const supabase = createClient();
+	// Create fetchData as a useCallback so it can be called from anywhere
+	const fetchData = useCallback(async () => {
+		console.log("Fetching data...");
+		const supabase = createClient();
 
+		try {
 			// Fetch all events
-			const { data: events } = await supabase
+			const { data: events, error: eventsError } = await supabase
 				.from("events")
 				.select("*")
 				.order("event_date", { ascending: false });
 
+			if (eventsError) {
+				console.error("Error fetching events:", eventsError);
+				return;
+			}
+
 			// Store all events for reference
 			if (events) {
+				console.log("Events fetched:", events.length, events.map(e => ({ id: e.event_id, name: e.event_name, is_active: e.is_active, is_accepted: e.is_accepted })));
 				setAllEvents(events);
 				setActiveEvents(events.slice(0, 5).map(e => ({
 					id: e.event_id,
@@ -184,6 +193,24 @@ export default function AdminDashboard() {
 					attendees: e.expected_attendance,
 					status: e.is_active ? "Active" : "Inactive"
 				})));
+				
+				// Get pending approvals (events not yet accepted)
+				const pendingEvents = events.filter(e => !e.is_accepted).map(e => ({
+					id: e.event_id,
+					name: e.event_name,
+					organizer: e.event_type,
+					date: e.event_date,
+					participants: e.expected_attendance,
+					is_accepted: e.is_accepted
+				}));
+				setEventApprovals(pendingEvents);
+				console.log("Pending approvals:", pendingEvents.length);
+				
+				setStats(prev => ({ 
+					...prev, 
+					totalEvents: events.length, 
+					pendingApprovals: pendingEvents.length 
+				}));
 			}
 
 			// Fetch all participants (users)
@@ -203,25 +230,6 @@ export default function AdminDashboard() {
 				.eq("status", "pending")
 				.order("created_at", { ascending: false });
 
-			if (events) {
-				const active = events.filter(e => e.is_active).slice(0, 2).map(e => ({
-					id: e.event_id,
-					name: e.event_name,
-					organizer: e.event_type,
-					attendees: e.expected_attendance,
-					status: "Active"
-				}));
-				setEventApprovals(events.slice(0, 2).map(e => ({
-					id: e.event_id,
-					name: e.event_name,
-					organizer: e.event_type,
-					date: e.event_date,
-					participants: e.expected_attendance,
-					is_accepted: e.is_accepted
-				})));
-				setStats(prev => ({ ...prev, totalEvents: events.length, pendingApprovals: Math.min(2, events.length) }));
-			}
-
 			if (participants && loginDetails) {
 				const userList = participants.slice(0, 4).map(p => ({
 					id: p.participant_id,
@@ -237,15 +245,20 @@ export default function AdminDashboard() {
 			if (apps) {
 				setApplications(apps);
 			}
-		};
+		} catch (error) {
+			console.error("Error in fetchData:", error);
+		}
+	}, []);
 
+	useEffect(() => {
 		if (isAuthorized) {
+			// Initial fetch
 			fetchData();
 
 			// Set up real-time subscriptions
 			const supabase = createClient();
 			const subscription = supabase
-				.channel("admin-updates")
+				.channel("admin-dashboard")
 				.on(
 					"postgres_changes",
 					{
@@ -254,6 +267,7 @@ export default function AdminDashboard() {
 						table: "events",
 					},
 					() => {
+						console.log("Events changed - refreshing");
 						fetchData();
 					}
 				)
@@ -265,6 +279,7 @@ export default function AdminDashboard() {
 						table: "applications",
 					},
 					() => {
+						console.log("Applications changed - refreshing");
 						fetchData();
 					}
 				)
@@ -276,42 +291,159 @@ export default function AdminDashboard() {
 						table: "participants",
 					},
 					() => {
+						console.log("Participants changed - refreshing");
 						fetchData();
 					}
 				)
-				.subscribe();
+				.subscribe((status) => {
+					console.log("Subscription status:", status);
+				});
 
-			// Auto-refresh every 5 seconds as fallback
-			const interval = setInterval(fetchData, 5000);
+			// Auto-refresh every 2 seconds as fallback for live updates
+			const interval = setInterval(fetchData, 2000);
 
 			return () => {
 				subscription.unsubscribe();
 				clearInterval(interval);
 			};
 		}
-	}, [isAuthorized]);
+	}, [isAuthorized, fetchData]);
 
-
-
-	const approveEvent = (id) => {
-		setEventApprovals(eventApprovals.filter((e) => e.id !== id));
+	// Helper to call server-side admin API and safely parse JSON/text responses
+	const callAdminApi = async (body) => {
+		const res = await fetch('/api/admin/events', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(body),
+		});
+		const text = await res.text();
+		try {
+			return JSON.parse(text);
+		} catch (e) {
+			return { error: text || e.message, status: res.status };
+		}
 	};
 
-	const rejectEvent = (id) => {
-		setEventApprovals(eventApprovals.filter((e) => e.id !== id));
+
+
+	const approveEvent = async (id) => {
+		console.log("approveEvent called with id:", id);
+		try {
+			if (!id) {
+				alert("Error: Event ID is missing");
+				return;
+			}
+
+			const json = await callAdminApi({ action: 'update', id, fields: { is_accepted: true } });
+			console.log('approveEvent response (admin API):', json);
+			if (json.error) {
+				console.error('Approval error:', json.error);
+				alert(`Error approving event: ${json.error.message || JSON.stringify(json.error)}`);
+				return;
+			}
+
+			console.log("Event approved, refreshing data");
+			alert("Event approved successfully!");
+			await fetchData(); // Refresh immediately
+		} catch (error) {
+			console.error("Approval error:", error);
+			alert(`Error approving event: ${error.message}`);
+		}
+	};
+
+	const rejectEvent = async (id) => {
+		console.log("rejectEvent called with id:", id);
+		try {
+			if (!id) {
+				alert("Error: Event ID is missing");
+				return;
+			}
+
+			const json = await callAdminApi({ action: 'update', id, fields: { is_accepted: false } });
+			console.log('rejectEvent response (admin API):', json);
+			if (json.error) {
+				console.error('Rejection error:', json.error);
+				alert(`Error rejecting event: ${json.error.message || JSON.stringify(json.error)}`);
+				return;
+			}
+
+			console.log("Event rejected, refreshing data");
+			alert("Event rejected successfully!");
+			await fetchData(); // Refresh immediately
+		} catch (error) {
+			console.error("Rejection error:", error);
+			alert(`Error rejecting event: ${error.message}`);
+		}
+	};
+
+	const backToQueue = async (id) => {
+		console.log("backToQueue called with id:", id);
+		try {
+			if (!id) {
+				alert("Error: Event ID is missing");
+				return;
+			}
+
+			const json = await callAdminApi({ action: 'update', id, fields: { is_accepted: false } });
+			console.log('backToQueue response (admin API):', json);
+			if (json.error) {
+				console.error('Error:', json.error);
+				alert(`Error sending event back to queue: ${json.error.message || JSON.stringify(json.error)}`);
+				return;
+			}
+
+			console.log("Event sent back to queue, refreshing data");
+			alert("Event sent back to approval queue!");
+			await fetchData(); // Refresh immediately
+		} catch (error) {
+			console.error("Error:", error);
+			alert(`Error sending event back to queue: ${error.message}`);
+		}
 	};
 
 	const toggleEventAcceptance = async (eventId, currentStatus) => {
-		const supabase = createClient();
-		const { error } = await supabase
-			.from("events")
-			.update({ is_accepted: !currentStatus })
-			.eq("event_id", eventId);
+		try {
+			const json = await callAdminApi({ action: 'update', id: eventId, fields: { is_accepted: !currentStatus } });
+			console.log('toggleEventAcceptance response (admin API):', json);
+			if (json.error) {
+				console.error('Error toggling acceptance:', json.error);
+				alert(`Error updating event: ${json.error.message || JSON.stringify(json.error)}`);
+				return;
+			}
 
-		if (!error) {
-			setEventApprovals(eventApprovals.map(e => 
-				e.id === eventId ? { ...e, is_accepted: !currentStatus } : e
-			));
+			console.log("Toggled acceptance, refreshing data");
+			await fetchData(); // Refresh immediately
+		} catch (error) {
+			console.error("Error toggling acceptance:", error);
+			alert(`Error updating event: ${error.message}`);
+		}
+	};
+
+	const toggleEventActive = async (eventId, isCurrentlyActive) => {
+		console.log("toggleEventActive called with eventId:", eventId, "isCurrentlyActive:", isCurrentlyActive);
+		try {
+			if (!eventId) {
+				alert("Error: Event ID is missing");
+				return;
+			}
+
+			const newStatus = !isCurrentlyActive; // Toggle the status
+			console.log("Updating is_active to:", newStatus);
+
+			const json = await callAdminApi({ action: 'update', id: eventId, fields: { is_active: newStatus } });
+			console.log('toggleEventActive response (admin API):', json);
+			if (json.error) {
+				console.error('Error toggling active:', json.error);
+				alert(`Error updating event: ${json.error.message || JSON.stringify(json.error)}`);
+				return;
+			}
+
+			console.log("Toggled active status, refreshing data");
+			alert("Event status updated successfully!");
+			await fetchData(); // Refresh immediately
+		} catch (error) {
+			console.error("Error toggling active:", error);
+			alert(`Error updating event: ${error.message}`);
 		}
 	};
 
@@ -329,7 +461,7 @@ export default function AdminDashboard() {
 			}
 
 			// Create event from approved application
-			const { error: eventError } = await supabase
+			const { data: eventData, error: eventError } = await supabase
 				.from("events")
 				.insert([{
 					event_name: app.event_name,
@@ -344,6 +476,7 @@ export default function AdminDashboard() {
 					is_accepted: true,
 				}]);
 
+			console.log("approveApplication insert response:", { eventData, eventError });
 			if (eventError) {
 				console.error("Event creation error:", eventError);
 				alert(`Error creating event: ${eventError.message}`);
@@ -362,8 +495,9 @@ export default function AdminDashboard() {
 				return;
 			}
 
-			setApplications(applications.filter(a => a.id !== id));
 			alert("Application approved and event created successfully!");
+			console.log("Application approved, refreshing data");
+			await fetchData(); // Refresh immediately
 		} catch (error) {
 			console.error("Approval error:", error);
 			alert(`Error approving application: ${error.message}`);
@@ -388,8 +522,9 @@ export default function AdminDashboard() {
 				return;
 			}
 
-			setApplications(applications.filter(a => a.id !== id));
 			alert("Application rejected successfully!");
+			console.log("Application rejected, refreshing data");
+			await fetchData(); // Refresh immediately
 		} catch (error) {
 			console.error("Rejection error:", error);
 			alert(`Error rejecting application: ${error.message}`);
@@ -397,36 +532,27 @@ export default function AdminDashboard() {
 	};
 
 	const updateEventStatus = async (eventId, isActive, isAccepted) => {
+		console.log("updateEventStatus called with:", { eventId, isActive, isAccepted });
 		try {
-			const supabase = createClient();
-			const { error } = await supabase
-				.from("events")
-				.update({ is_active: isActive, is_accepted: isAccepted })
-				.eq("event_id", eventId);
-
-			if (error) {
-				console.error("Event update error:", error);
-				alert(`Error updating event: ${error.message}`);
+			if (!eventId) {
+				alert("Error: Event ID is missing");
 				return;
 			}
 
-			setEditingEvent(null);
-			alert("Event status updated successfully!");
-			// Refresh the data
-			const { data: events } = await supabase
-				.from("events")
-				.select("*")
-				.order("event_date", { ascending: false });
-			if (events) {
-				setAllEvents(events);
-				setActiveEvents(events.slice(0, 5).map(e => ({
-					id: e.event_id,
-					name: e.event_name,
-					organizer: e.event_type,
-					attendees: e.expected_attendance,
-					status: e.is_active ? "Active" : "Inactive"
-				})));
+			const json = await callAdminApi({ action: 'update', id: eventId, fields: { is_active: isActive, is_accepted: isAccepted } });
+			console.log('updateEventStatus response (admin API):', json);
+			if (json.error) {
+				console.error('Event update error:', json.error);
+				alert(`Error updating event: ${json.error.message || JSON.stringify(json.error)}`);
+				return;
 			}
+
+			console.log("Event status updated successfully");
+			setEditingEvent(null);
+			setEditMode("view");
+			alert("Event status updated successfully!");
+			console.log("Event status updated, refreshing data");
+			await fetchData(); // Refresh immediately
 		} catch (error) {
 			console.error("Event update error:", error);
 			alert(`Error updating event: ${error.message}`);
@@ -434,39 +560,30 @@ export default function AdminDashboard() {
 	};
 
 	const deleteEvent = async (eventId) => {
+		console.log("deleteEvent called with id:", eventId);
 		if (!window.confirm("Are you sure you want to delete this event? This action cannot be undone.")) {
 			return;
 		}
 
 		try {
-			const supabase = createClient();
-			const { error } = await supabase
-				.from("events")
-				.delete()
-				.eq("event_id", eventId);
-
-			if (error) {
-				console.error("Event delete error:", error);
-				alert(`Error deleting event: ${error.message}`);
+			if (!eventId) {
+				alert("Error: Event ID is missing");
 				return;
 			}
 
-			alert("Event deleted successfully!");
-			// Refresh the data
-			const { data: events } = await supabase
-				.from("events")
-				.select("*")
-				.order("event_date", { ascending: false });
-			if (events) {
-				setAllEvents(events);
-				setActiveEvents(events.slice(0, 5).map(e => ({
-					id: e.event_id,
-					name: e.event_name,
-					organizer: e.event_type,
-					attendees: e.expected_attendance,
-					status: e.is_active ? "Active" : "Inactive"
-				})));
+			// Call server-side admin API (service role) to delete the event so RLS doesn't block
+			const json = await callAdminApi({ action: 'delete', id: eventId });
+			console.log('deleteEvent response (admin API):', json);
+
+			if (json.error) {
+				console.error('Event delete error:', json.error);
+				alert(`Error deleting event: ${json.error.message || JSON.stringify(json.error)}`);
+				return;
 			}
+
+			console.log('Event deleted successfully, refreshing data');
+			alert('Event deleted successfully!');
+			await fetchData(); // Refresh immediately
 		} catch (error) {
 			console.error("Event delete error:", error);
 			alert(`Error deleting event: ${error.message}`);
@@ -573,34 +690,66 @@ export default function AdminDashboard() {
 												<td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
 													{event.attendees}
 												</td>
-												<td className="px-4 py-3">
-													<span className="rounded-full px-2 py-1 text-xs font-semibold" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
+											<td className="px-4 py-3">
+													<span 
+														onClick={() => {
+															console.log("Status badge clicked for event:", event.id, "current status:", event.status);
+															const isCurrentlyActive = event.status === "Active";
+															toggleEventActive(event.id, isCurrentlyActive);
+														}}
+														className="rounded-full px-2 py-1 text-xs font-semibold cursor-pointer transition hover:opacity-80" 
+														style={{ 
+															backgroundColor: event.status === "Active" ? "rgba(16, 185, 129, 0.15)" : "rgba(107, 114, 128, 0.15)",
+															color: event.status === "Active" ? "#10b981" : "#6b7280"
+														}}>
 														{event.status}
 													</span>
 												</td>
 												<td className="px-4 py-3 flex gap-2">
 													<button 
 														onClick={() => {
-															const event = allEvents.find(e => e.event_id === event.id);
-															if (event) setEditingEvent(event);
+															console.log("View button clicked for event id:", event.id);
+															const evt = allEvents.find(e => e.event_id === event.id);
+															console.log("Found event:", evt);
+															if (evt) {
+																setEditingEvent(evt);
+																setEditMode("view");
+																console.log("Modal opened in view mode");
+															} else {
+																alert("Event not found");
+															}
 														}}
 														className="p-1 hover:opacity-70" 
-														style={{ color: "#3b82f6" }}>
+														style={{ color: "#3b82f6" }}
+														title="View">
 														<Eye size={14} />
 													</button>
 													<button 
 														onClick={() => {
-															const event = allEvents.find(e => e.event_id === event.id);
-															if (event) setEditingEvent(event);
+															console.log("Edit button clicked for event id:", event.id);
+															const evt = allEvents.find(e => e.event_id === event.id);
+															console.log("Found event:", evt);
+															if (evt) {
+																setEditingEvent(evt);
+																setEditMode("edit");
+																console.log("Modal opened in edit mode");
+															} else {
+																alert("Event not found");
+															}
 														}}
 														className="p-1 hover:opacity-70" 
-														style={{ color: "#fb923c" }}>
+														style={{ color: "#fb923c" }}
+														title="Edit">
 														<Edit size={14} />
 													</button>
 													<button 
-														onClick={() => deleteEvent(event.id)}
+														onClick={() => {
+															console.log("Delete button clicked for event id:", event.id);
+															deleteEvent(event.id);
+														}}
 														className="p-1 hover:opacity-70" 
-														style={{ color: "#ef4444" }}>
+														style={{ color: "#ef4444" }}
+														title="Delete">
 														<Trash2 size={14} />
 													</button>
 												</td>
@@ -638,31 +787,57 @@ export default function AdminDashboard() {
 													Date: {event.date} | Expected participants: {event.participants}
 												</p>
 											</div>
-											<div className="ml-4 flex gap-2">
+											<div className="ml-4 flex flex-col gap-2">
+												<div className="flex gap-2">
+													<button
+														onClick={() => {
+															console.log("Approve button clicked for event:", event.id);
+															approveEvent(event.id);
+														}}
+														className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+														style={{
+															backgroundColor: "rgba(16, 185, 129, 0.15)",
+															color: "#10b981",
+														}}
+													>
+														Approve
+													</button>
+													<button
+														onClick={() => {
+															console.log("Reject button clicked for event:", event.id);
+															rejectEvent(event.id);
+														}}
+														className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+														style={{
+															backgroundColor: "rgba(239, 68, 68, 0.15)",
+															color: "#ef4444",
+														}}
+													>
+														Reject
+													</button>
+												</div>
 												<button
-													onClick={() => approveEvent(event.id)}
-													className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+													onClick={() => {
+														console.log("Back to Queue button clicked for event:", event.id);
+														backToQueue(event.id);
+													}}
+													className="rounded-lg px-4 py-2 font-semibold text-xs transition hover:opacity-90 text-center"
 													style={{
-														backgroundColor: "rgba(16, 185, 129, 0.15)",
-														color: "#10b981",
+														backgroundColor: "rgba(168, 85, 247, 0.15)",
+														color: "#a855f7",
 													}}
 												>
-													Approve
-												</button>
-												<button
-													onClick={() => rejectEvent(event.id)}
-													className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
-													style={{
-														backgroundColor: "rgba(239, 68, 68, 0.15)",
-														color: "#ef4444",
-													}}
-												>
-													Reject
+													Back to Queue
 												</button>
 											</div>
 										</div>
 									</div>
 								))}
+								{eventApprovals.length === 0 && (
+									<p style={{ color: "var(--text-muted)" }} className="text-center py-8">
+										No pending approvals
+									</p>
+								)}
 							</div>
 						</section>
 
@@ -822,74 +997,151 @@ export default function AdminDashboard() {
 			{editingEvent && (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
 					<div
-						className="rounded-lg border w-full max-w-md mx-4 p-6 space-y-4"
+						className="rounded-lg border w-full max-w-md mx-4 p-6 space-y-4 max-h-96 overflow-y-auto"
 						style={{
 							backgroundColor: "var(--surface)",
 							borderColor: "var(--border-subtle)",
 						}}
 					>
-						<h3 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
-							Edit Event Status
-						</h3>
+						<div className="flex items-center justify-between">
+							<h3 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
+								{editMode === "view" ? "View Event" : "Edit Event Status"}
+							</h3>
+							<button
+								onClick={() => {
+									setEditingEvent(null);
+									setEditMode("view");
+								}}
+								className="p-1 hover:opacity-70"
+								style={{ color: "var(--text-muted)" }}
+							>
+								<X size={16} />
+							</button>
+						</div>
+
 						<div className="space-y-3">
 							<p style={{ color: "var(--text-muted)" }} className="text-sm">
-								<span style={{ color: "var(--foreground)" }} className="font-semibold">{editingEvent.event_name}</span>
+								<span style={{ color: "var(--foreground)" }} className="font-semibold">Event:</span> {editingEvent.event_name}
 							</p>
-							
-							<div className="space-y-2">
-								<label style={{ color: "var(--foreground)" }} className="text-sm font-semibold">
-									Active Status
-								</label>
-								<select
-									defaultValue={editingEvent.is_active ? "active" : "inactive"}
-									onChange={(e) => {
-										const isActive = e.target.value === "active";
-										updateEventStatus(editingEvent.event_id, isActive, editingEvent.is_accepted);
-									}}
-									className="w-full rounded-lg border px-3 py-2 text-sm"
-									style={{
-										backgroundColor: "var(--page-bg)",
-										borderColor: "var(--border-subtle)",
-										color: "var(--foreground)",
-									}}
-								>
-									<option value="active">Active</option>
-									<option value="inactive">Inactive</option>
-								</select>
-							</div>
 
-							<div className="space-y-2">
-								<label style={{ color: "var(--foreground)" }} className="text-sm font-semibold">
-									Approval Status
-								</label>
-								<select
-									defaultValue={editingEvent.is_accepted ? "accepted" : "pending"}
-									onChange={(e) => {
-										const isAccepted = e.target.value === "accepted";
-										updateEventStatus(editingEvent.event_id, editingEvent.is_active, isAccepted);
-									}}
-									className="w-full rounded-lg border px-3 py-2 text-sm"
-									style={{
-										backgroundColor: "var(--page-bg)",
-										borderColor: "var(--border-subtle)",
-										color: "var(--foreground)",
-									}}
-								>
-									<option value="accepted">Accepted</option>
-									<option value="pending">Pending</option>
-								</select>
-							</div>
+							{editMode === "view" ? (
+								// VIEW MODE
+								<>
+									<div className="border-t" style={{ borderColor: "var(--border-subtle)" }} />
+									<div className="grid grid-cols-2 gap-2 text-xs">
+										<div>
+											<p style={{ color: "var(--text-muted)" }}>Organizer</p>
+											<p style={{ color: "var(--foreground)" }} className="font-semibold">{editingEvent.event_type}</p>
+										</div>
+										<div>
+											<p style={{ color: "var(--text-muted)" }}>Expected Attendees</p>
+											<p style={{ color: "var(--foreground)" }} className="font-semibold">{editingEvent.expected_attendance}</p>
+										</div>
+										<div>
+											<p style={{ color: "var(--text-muted)" }}>Date</p>
+											<p style={{ color: "var(--foreground)" }} className="font-semibold">{editingEvent.event_date}</p>
+										</div>
+										<div>
+											<p style={{ color: "var(--text-muted)" }}>Active</p>
+											<p style={{ color: "var(--foreground)" }} className="font-semibold">{editingEvent.is_active ? "Yes" : "No"}</p>
+										</div>
+										<div>
+											<p style={{ color: "var(--text-muted)" }}>Accepted</p>
+											<p style={{ color: "var(--foreground)" }} className="font-semibold">{editingEvent.is_accepted ? "Yes" : "No"}</p>
+										</div>
+										<div>
+											<p style={{ color: "var(--text-muted)" }}>Venue</p>
+											<p style={{ color: "var(--foreground)" }} className="font-semibold text-xs">{editingEvent.venue_name || "N/A"}</p>
+										</div>
+									</div>
+									<div className="border-t" style={{ borderColor: "var(--border-subtle)" }} />
+									<button
+										onClick={() => setEditMode("edit")}
+										className="w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+										style={{
+											backgroundColor: "#fb923c",
+											color: "white",
+										}}
+									>
+										Edit Status
+									</button>
+									<button
+										onClick={() => {
+											setEditingEvent(null);
+											setEditMode("view");
+										}}
+										className="w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+										style={{
+											backgroundColor: "var(--border-subtle)",
+											color: "var(--foreground)",
+										}}
+									>
+										Close
+									</button>
+								</>
+							) : (
+								// EDIT MODE
+								<>
+									<div className="border-t" style={{ borderColor: "var(--border-subtle)" }} />
+									<div className="space-y-2">
+										<label style={{ color: "var(--foreground)" }} className="text-sm font-semibold">
+											Active Status
+										</label>
+										<select
+											defaultValue={editingEvent.is_active ? "active" : "inactive"}
+											onChange={(e) => {
+												const isActive = e.target.value === "active";
+												updateEventStatus(editingEvent.event_id, isActive, editingEvent.is_accepted);
+											}}
+											className="w-full rounded-lg border px-3 py-2 text-sm"
+											style={{
+												backgroundColor: "var(--page-bg)",
+												borderColor: "var(--border-subtle)",
+												color: "var(--foreground)",
+											}}
+										>
+											<option value="active">Active</option>
+											<option value="inactive">Inactive</option>
+										</select>
+									</div>
 
-							<button
-								onClick={() => setEditingEvent(null)}
-								className="w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
-								style={{
-									backgroundColor: "var(--border-subtle)",
-									color: "var(--foreground)",
-								}}
-							>
-								Close
-							</button>
+									<div className="space-y-2">
+										<label style={{ color: "var(--foreground)" }} className="text-sm font-semibold">
+											Approval Status
+										</label>
+										<select
+											defaultValue={editingEvent.is_accepted ? "accepted" : "pending"}
+											onChange={(e) => {
+												const isAccepted = e.target.value === "accepted";
+												updateEventStatus(editingEvent.event_id, editingEvent.is_active, isAccepted);
+											}}
+											className="w-full rounded-lg border px-3 py-2 text-sm"
+											style={{
+												backgroundColor: "var(--page-bg)",
+												borderColor: "var(--border-subtle)",
+												color: "var(--foreground)",
+											}}
+										>
+											<option value="accepted">Accepted</option>
+											<option value="pending">Pending</option>
+										</select>
+									</div>
+
+									<button
+										onClick={() => {
+											setEditingEvent(null);
+											setEditMode("view");
+										}}
+										className="w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+										style={{
+											backgroundColor: "var(--border-subtle)",
+											color: "var(--foreground)",
+										}}
+									>
+										Close
+									</button>
+								</>
+							)}
 						</div>
 					</div>
 				</div>
