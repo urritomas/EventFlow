@@ -5,6 +5,7 @@ import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 import SiteHeader from "../components/SiteHeader";
 import bcrypt from "bcryptjs";
+import { Building2, User, Lock } from "lucide-react";
 
 function SectionLabel({ children }) {
 	return (
@@ -57,7 +58,7 @@ function Field({ label, children, hint }) {
 	);
 }
 
-function LoginModeButton({ mode, label, icon, isActive, onClick }) {
+function LoginModeButton({ mode, label, icon: Icon, isActive, onClick }) {
 	return (
 		<button
 			onClick={onClick}
@@ -67,7 +68,7 @@ function LoginModeButton({ mode, label, icon, isActive, onClick }) {
 					: "border-white/15 bg-white/6 hover:border-emerald-300/40"
 			}`}
 		>
-			<div className="text-3xl">{icon}</div>
+			<Icon size={32} className="text-emerald-400" />
 			<span className="text-sm font-semibold text-slate-200">{label}</span>
 		</button>
 	);
@@ -145,9 +146,11 @@ export default function LoginPage() {
 					return;
 				}
 
-				setSubmitMessage(`✓ Welcome back, ${orgUser.org_name}! Redirecting to dashboard...`);
+				localStorage.setItem("isLoggedIn", "true");
+				localStorage.setItem("userRole", "organization");
+				setSubmitMessage(`Welcome back, ${orgUser.org_name}! Redirecting to dashboard...`);
 				setTimeout(() => {
-					window.location.href = "/dashboard/organization";
+					window.location.href = "/orgDashboard";
 				}, 1500);
 			} else if (loginMode === "personal") {
 				// Personal login
@@ -181,9 +184,11 @@ export default function LoginPage() {
 					return;
 				}
 
-				setSubmitMessage(`✓ Welcome back, ${personalUser.first_name}! Redirecting to your dashboard...`);
+				localStorage.setItem("isLoggedIn", "true");
+				localStorage.setItem("userRole", "personal");
+				setSubmitMessage(`Welcome back, ${personalUser.first_name}! Redirecting to your dashboard...`);
 				setTimeout(() => {
-					window.location.href = "/dashboard/participant";
+					window.location.href = "/personalDashboard";
 				}, 1500);
 			} else if (loginMode === "admin") {
 				// Admin login
@@ -217,9 +222,11 @@ export default function LoginPage() {
 					return;
 				}
 
-				setSubmitMessage("✓ Admin access verified. Redirecting to admin panel...");
+				localStorage.setItem("isLoggedIn", "true");
+				localStorage.setItem("userRole", "admin");
+				setSubmitMessage("Admin access verified. Redirecting to admin panel...");
 				setTimeout(() => {
-					window.location.href = "/dashboard/admin";
+					window.location.href = "/adminDashboard";
 				}, 1500);
 			}
 		} catch (error) {
@@ -254,14 +261,14 @@ export default function LoginPage() {
 							<LoginModeButton
 								mode="organization"
 								label="Organization Login"
-								icon="🏢"
+								icon={Building2}
 								isActive={loginMode === "organization"}
 								onClick={() => setLoginMode("organization")}
 							/>
 							<LoginModeButton
 								mode="personal"
 								label="Personal Login"
-								icon="👤"
+								icon={User}
 								isActive={loginMode === "personal"}
 								onClick={() => setLoginMode("personal")}
 							/>
@@ -279,7 +286,7 @@ export default function LoginPage() {
 									<LoginModeButton
 										mode="admin"
 										label="Admin Portal"
-										icon="🔑"
+										icon={Lock}
 										isActive={loginMode === "admin"}
 										onClick={() => setLoginMode("admin")}
 									/>
@@ -335,10 +342,10 @@ export default function LoginPage() {
 									<div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-slate-700">
 										<p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">Organization Benefits</p>
 										<ul className="mt-4 space-y-2 text-sm leading-7">
-											<li>✓ Create and manage multiple events</li>
-											<li>✓ Configure RFID, facial recognition, and geofencing</li>
-											<li>✓ Real-time attendance dashboard</li>
-											<li>✓ Automated certificate generation</li>
+											<li>✔ Create and manage multiple events</li>
+											<li>✔ Configure RFID, facial recognition, and geofencing</li>
+											<li>✔ Real-time attendance dashboard</li>
+											<li>✔ Automated certificate generation</li>
 										</ul>
 									</div>
 
@@ -395,10 +402,10 @@ export default function LoginPage() {
 									<div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-slate-700">
 										<p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">Participant Features</p>
 										<ul className="mt-4 space-y-2 text-sm leading-7">
-											<li>✓ Register your facial biometrics once</li>
-											<li>✓ Fast check-in using face recognition</li>
-											<li>✓ View your attended events</li>
-											<li>✓ Download certificates automatically</li>
+											<li>✔ Register your facial biometrics once</li>
+											<li>✔ Fast check-in using face recognition</li>
+											<li>✔ View your attended events</li>
+											<li>✔ Download certificates automatically</li>
 										</ul>
 									</div>
 
@@ -455,10 +462,10 @@ export default function LoginPage() {
 									<div className="rounded-3xl border-2 border-amber-300 bg-amber-50 p-6 text-amber-900">
 										<p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-700">Admin Access</p>
 										<ul className="mt-4 space-y-2 text-sm leading-7">
-											<li>✓ Review pending event requests</li>
-											<li>✓ Approve or reject event setups</li>
-											<li>✓ Monitor system health</li>
-											<li>✓ Manage organization accounts</li>
+											<li>✔ Review pending event requests</li>
+											<li>✔ Approve or reject event setups</li>
+											<li>✔ Monitor system health</li>
+											<li>✔ Manage organization accounts</li>
 										</ul>
 									</div>
 
