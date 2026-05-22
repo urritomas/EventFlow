@@ -491,6 +491,7 @@ export default function PersonalDashboard() {
 										Register your face for secure event check-in
 									</p>
 									<button
+										onClick={() => router.push("/personalDashboard/register-face")}
 										className="mt-4 w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
 										style={{
 											backgroundColor: "rgba(16, 185, 129, 0.15)",
