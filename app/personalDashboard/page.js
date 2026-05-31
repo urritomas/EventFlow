@@ -286,6 +286,10 @@ export default function PersonalDashboard() {
 	const [isRegistering, setIsRegistering] = useState(false);
 	const [showRFIDStep, setShowRFIDStep] = useState(false);
 	const [rfidCode, setRfidCode] = useState("");
+	const [registeredRFID, setRegisteredRFID] = useState(null);
+	const [newRFIDCode, setNewRFIDCode] = useState("");
+	const [isSettingRFID, setIsSettingRFID] = useState(false);
+	const [rfidMessage, setRfidMessage] = useState("");
 	const [registrationMessage, setRegistrationMessage] = useState("");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [userRegisteredEventIds, setUserRegisteredEventIds] = useState(new Set());
@@ -391,6 +395,74 @@ export default function PersonalDashboard() {
 			setRegistrationMessage("Error: " + error.message);
 		} finally {
 			setIsRegistering(false);
+		}
+	};
+
+	const handleSetRFIDCard = async () => {
+		if (!participantId) {
+			setRfidMessage("Error: Participant profile not loaded");
+			return;
+		}
+
+		if (!newRFIDCode.trim()) {
+			setRfidMessage("Please enter your RFID code");
+			return;
+		}
+
+		setIsSettingRFID(true);
+		setRfidMessage("");
+
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("participants")
+				.update({ rfid_code: newRFIDCode })
+				.eq("participant_id", participantId);
+
+			if (error) {
+				console.error("RFID save error:", error);
+				setRfidMessage("Error saving RFID: " + error.message);
+			} else {
+				setRegisteredRFID(newRFIDCode);
+				setNewRFIDCode("");
+				setRfidMessage("✓ RFID card registered successfully!");
+				setTimeout(() => setRfidMessage(""), 3000);
+			}
+		} catch (error) {
+			console.error("RFID registration error:", error);
+			setRfidMessage("Error: " + error.message);
+		} finally {
+			setIsSettingRFID(false);
+		}
+	};
+
+	const handleRemoveRFID = async () => {
+		if (!participantId) return;
+
+		setIsSettingRFID(true);
+		setRfidMessage("");
+
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("participants")
+				.update({ rfid_code: null })
+				.eq("participant_id", participantId);
+
+			if (error) {
+				console.error("RFID remove error:", error);
+				setRfidMessage("Error removing RFID: " + error.message);
+			} else {
+				setRegisteredRFID(null);
+				setNewRFIDCode("");
+				setRfidMessage("✓ RFID card removed successfully!");
+				setTimeout(() => setRfidMessage(""), 3000);
+			}
+		} catch (error) {
+			console.error("RFID remove error:", error);
+			setRfidMessage("Error: " + error.message);
+		} finally {
+			setIsSettingRFID(false);
 		}
 	};
 
@@ -607,6 +679,19 @@ export default function PersonalDashboard() {
 							idNumber: idNum,
 							phone: phoneNum,
 						}));
+						
+						// Fetch RFID code from participants table
+						const supabaseForRFID = createClient();
+						const { data: participantData } = await supabaseForRFID
+							.from("participants")
+							.select("rfid_code")
+							.eq("email", email)
+							.single();
+						
+						if (participantData?.rfid_code) {
+							setRegisteredRFID(participantData.rfid_code);
+							console.log("Found registered RFID:", participantData.rfid_code);
+						}
 					} else {
 						console.warn("No data returned from database");
 					}
@@ -1266,12 +1351,83 @@ export default function PersonalDashboard() {
 									<p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
 										Link your RFID card for automated tracking
 									</p>
-									<div className="mt-4 rounded-lg border border-dashed p-4 text-center" style={{ borderColor: "rgba(59, 130, 246, 0.3)" }}>
-										<Smartphone size={24} style={{ color: "#3b82f6", opacity: 0.5 }} />
-										<p className="mt-2 text-xs font-semibold" style={{ color: "#3b82f6" }}>
-											Tap RFID card
-										</p>
-									</div>
+
+									{/* Status Section */}
+									{registeredRFID ? (
+										<div className="mt-4 rounded-lg border p-3" style={{ 
+											backgroundColor: "rgba(16, 185, 129, 0.1)", 
+											borderColor: "#10b981" 
+										}}>
+											<p className="text-xs font-semibold flex items-center gap-1.5" style={{ color: "#10b981" }}>
+												<CheckCircle size={14} /> Registered
+											</p>
+											<p className="mt-2 text-xs break-all" style={{ color: "var(--text-muted)" }}>
+												{registeredRFID}
+											</p>
+											<button
+												onClick={handleRemoveRFID}
+												disabled={isSettingRFID}
+												className="mt-3 w-full rounded-lg px-3 py-1.5 text-xs font-semibold transition hover:opacity-90 disabled:opacity-50"
+												style={{
+													backgroundColor: "rgba(239, 68, 68, 0.15)",
+													color: "#ef4444",
+												}}
+											>
+												{isSettingRFID ? "Removing..." : "Remove Card"}
+											</button>
+										</div>
+									) : (
+										<div className="mt-4 space-y-3">
+											<div>
+												<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
+													RFID Code
+												</label>
+												<input
+													type="text"
+													value={newRFIDCode}
+													onChange={(e) => setNewRFIDCode(e.target.value)}
+													onKeyPress={(e) => {
+														if (e.key === "Enter") {
+															handleSetRFIDCard();
+														}
+													}}
+													placeholder="Enter RFID code or tap card"
+													autoFocus
+													className="w-full rounded-lg border px-3 py-2 text-sm"
+													style={{
+														backgroundColor: "var(--page-bg)",
+														borderColor: "var(--border-subtle)",
+														color: "var(--foreground)",
+													}}
+												/>
+											</div>
+
+											{rfidMessage && (
+												<div
+													className="rounded-lg p-2 text-xs"
+													style={{
+														backgroundColor: rfidMessage.includes("Error") ? "rgba(239, 68, 68, 0.1)" : "rgba(16, 185, 129, 0.1)",
+														color: rfidMessage.includes("Error") ? "#ef4444" : "#10b981",
+														borderLeft: `3px solid ${rfidMessage.includes("Error") ? "#ef4444" : "#10b981"}`,
+													}}
+												>
+													{rfidMessage}
+												</div>
+											)}
+
+											<button
+												onClick={handleSetRFIDCard}
+												disabled={isSettingRFID || !newRFIDCode.trim()}
+												className="w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90 disabled:opacity-50"
+												style={{
+													backgroundColor: "#3b82f6",
+													color: "white",
+												}}
+											>
+												{isSettingRFID ? "Saving..." : "Register Card"}
+											</button>
+										</div>
+									)}
 								</div>
 							</div>
 						</section>
