@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../components/SiteHeader";
+import BehaviorAnalyticsCard from "../components/BehaviorAnalyticsCard";
 import {
 	Search,
 	User,
@@ -21,11 +22,13 @@ import {
 	BarChart3,
 	Award,
 	CheckCircle,
+	TrendingUp,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
 	const menuItems = [
 		{ label: "Dashboard", icon: BarChart3, href: "#dashboard" },
+		{ label: "Behavior Analytics", icon: TrendingUp, href: "#behavior" },
 		{ label: "Profile", icon: User, href: "#profile" },
 		{ label: "Events", icon: Search, href: "#events" },
 		{ label: "Attendance", icon: Smartphone, href: "#attendance" },
@@ -139,47 +142,62 @@ function StatCard({ title, value, subtitle, icon: Icon }) {
 	);
 }
 
-function EventCard({ event }) {
+function EventCard({ event, onViewDetails, isRegistered }) {
 	return (
 		<div
-			className="rounded-lg border p-4 shadow-sm transition-all hover:shadow-md"
+			className="rounded-lg border p-4 shadow-sm transition-all hover:shadow-md cursor-pointer relative"
+			onClick={() => onViewDetails(event)}
 			style={{
 				backgroundColor: "var(--surface)",
 				borderColor: "var(--border-subtle)",
 			}}
 		>
+			{isRegistered && (
+				<div
+					className="absolute top-2 right-2 rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold"
+					style={{ backgroundColor: "#10b981", color: "white" }}
+					title="You are registered for this event"
+				>
+					✓
+				</div>
+			)}
+
 			<div className="mb-3 flex items-start justify-between">
 				<h4 className="font-semibold text-sm pr-2" style={{ color: "var(--foreground)" }}>
-					{event.name}
+					{event.event_name}
 				</h4>
 				<div
 					className="rounded-full px-2 py-1 text-xs font-semibold whitespace-nowrap"
 					style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}
 				>
-					{event.status}
+					{new Date(event.event_date) > new Date() ? "Upcoming" : "Past"}
 				</div>
 			</div>
 
 			<div className="space-y-2">
 				<div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
 					<MapPin size={12} />
-					<span>{event.venue}</span>
+					<span>{event.venue_name || "TBA"}</span>
 				</div>
 				<div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
 					<Calendar size={12} />
-					<span>{event.date}</span>
+					<span>{new Date(event.event_date).toLocaleDateString()}</span>
 				</div>
 				<div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
 					<Clock size={12} />
-					<span>{event.time}</span>
+					<span>{event.start_time || "TBA"}</span>
 				</div>
 				<div className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
 					<Users size={12} />
-					<span>{event.attendees} attendees</span>
+					<span>{event.expected_attendance || 0} expected</span>
 				</div>
 			</div>
 
 			<button
+				onClick={(e) => {
+					e.stopPropagation();
+					onViewDetails(event);
+				}}
 				className="mt-3 w-full rounded-lg px-3 py-2 font-medium text-xs transition hover:opacity-90"
 				style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}
 			>
@@ -200,6 +218,54 @@ export default function PersonalDashboard() {
 			router.push("/landingPage");
 		} else {
 			setIsAuthorized(true);
+			
+			// Try to find or create participant
+			const findOrCreateParticipant = async () => {
+				try {
+					const email = localStorage.getItem("email");
+					const firstName = localStorage.getItem("firstName");
+					const lastName = localStorage.getItem("lastName");
+					
+					if (email) {
+						const supabase = createClient();
+						
+						// Try to find existing participant by email
+						const { data: participants, error: selectError } = await supabase
+							.from("participants")
+							.select("participant_id")
+							.eq("email", email);
+						
+						if (participants && participants.length > 0) {
+							setParticipantId(participants[0].participant_id);
+							console.log("✓ Found participant ID:", participants[0].participant_id);
+						} else {
+							// Create new participant if not found
+							const fullName = firstName && lastName ? `${firstName} ${lastName}` : "User";
+							const { data: newParticipant, error: insertError } = await supabase
+								.from("participants")
+								.insert({
+									name: fullName,
+									email: email,
+									student_id: email, // Use email as student_id
+									phone: null,
+									rfid_code: null
+								})
+								.select("participant_id");
+							
+							if (newParticipant && newParticipant.length > 0) {
+								setParticipantId(newParticipant[0].participant_id);
+								console.log("✓ Created new participant ID:", newParticipant[0].participant_id);
+							} else if (insertError) {
+								console.error("Error creating participant:", insertError.message);
+							}
+						}
+					}
+				} catch (error) {
+					console.error("Participant lookup error:", error.message);
+				}
+			};
+			
+			findOrCreateParticipant();
 		}
 	}, [router]);
 
@@ -214,6 +280,158 @@ export default function PersonalDashboard() {
 	const [certificates, setCertificates] = useState([]);
 	const [registeredEvents, setRegisteredEvents] = useState([]);
 	const [stats, setStats] = useState({ registered: 0, certificates: 0, attendance: 0 });
+	const [participantId, setParticipantId] = useState(null);
+	const [selectedEvent, setSelectedEvent] = useState(null);
+	const [isRegistered, setIsRegistered] = useState(false);
+	const [isRegistering, setIsRegistering] = useState(false);
+	const [showRFIDStep, setShowRFIDStep] = useState(false);
+	const [rfidCode, setRfidCode] = useState("");
+	const [registrationMessage, setRegistrationMessage] = useState("");
+	const [searchQuery, setSearchQuery] = useState("");
+	const [userRegisteredEventIds, setUserRegisteredEventIds] = useState(new Set());
+	const [profileData, setProfileData] = useState({
+		fullName: "",
+		email: "",
+		idNumber: "",
+		phone: "",
+	});
+	const [isSavingProfile, setIsSavingProfile] = useState(false);
+	const [profileMessage, setProfileMessage] = useState("");
+
+	const handleViewEventDetails = async (event) => {
+		setSelectedEvent(event);
+		setShowRFIDStep(false);
+		setRfidCode("");
+		setRegistrationMessage("");
+		
+		// Check if user is registered for this event
+		if (participantId) {
+			const supabase = createClient();
+			const { data: eventParticipants } = await supabase
+				.from("event_participants")
+				.select("*")
+				.eq("event_id", event.event_id)
+				.eq("participant_id", participantId);
+			
+			setIsRegistered(eventParticipants && eventParticipants.length > 0);
+		}
+	};
+
+	const handleRegisterEvent = async () => {
+		if (!participantId) {
+			setRegistrationMessage("Error: Setting up participant profile. Please refresh and try again.");
+			console.error("ParticipantId is null. Email:", localStorage.getItem("email"));
+			return;
+		}
+
+		setIsRegistering(true);
+		
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("event_participants")
+				.insert({
+					event_id: selectedEvent.event_id,
+					participant_id: participantId,
+					registered_at: new Date().toISOString(),
+				});
+
+			if (error) {
+				console.error("Registration error:", error);
+				setRegistrationMessage("Error: " + error.message);
+			} else {
+				setIsRegistered(true);
+				setShowRFIDStep(true);
+				setRegistrationMessage("✓ Event registration submitted! Now register your RFID card.");
+				
+				// Update the registered events list immediately
+				const newRegisteredIds = new Set(userRegisteredEventIds);
+				newRegisteredIds.add(selectedEvent.event_id);
+				setUserRegisteredEventIds(newRegisteredIds);
+			}
+		} catch (error) {
+			console.error("Catch error:", error);
+			setRegistrationMessage("Error: " + error.message);
+		} finally {
+			setIsRegistering(false);
+		}
+	};
+
+	const handleUnregisterEvent = async () => {
+		if (!participantId) {
+			setRegistrationMessage("Error: Setting up participant profile. Please refresh and try again.");
+			return;
+		}
+
+		setIsRegistering(true);
+		
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("event_participants")
+				.delete()
+				.eq("event_id", selectedEvent.event_id)
+				.eq("participant_id", participantId);
+
+			if (error) {
+				setRegistrationMessage("Error: " + error.message);
+			} else {
+				setIsRegistered(false);
+				setShowRFIDStep(false);
+				setRegistrationMessage("✓ You have been unregistered from this event");
+				
+				// Update the registered events list immediately
+				const newRegisteredIds = new Set(userRegisteredEventIds);
+				newRegisteredIds.delete(selectedEvent.event_id);
+				setUserRegisteredEventIds(newRegisteredIds);
+				
+				setTimeout(() => setSelectedEvent(null), 1500);
+			}
+		} catch (error) {
+			setRegistrationMessage("Error: " + error.message);
+		} finally {
+			setIsRegistering(false);
+		}
+	};
+
+	const handleRFIDSubmit = async () => {
+		if (!participantId) {
+			setRegistrationMessage("Error: Participant profile not loaded");
+			return;
+		}
+
+		if (!rfidCode.trim()) {
+			setRegistrationMessage("Please enter your RFID code");
+			return;
+		}
+
+		setIsRegistering(true);
+
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("participants")
+				.update({ rfid_code: rfidCode })
+				.eq("participant_id", participantId);
+
+			if (error) {
+				console.error("RFID save error:", error);
+				setRegistrationMessage("Error saving RFID: " + error.message);
+			} else {
+				setRegistrationMessage("✓ RFID registered successfully! Event registration complete.");
+				setTimeout(() => {
+					setSelectedEvent(null);
+					setShowRFIDStep(false);
+					setRfidCode("");
+				}, 2000);
+			}
+		} catch (error) {
+			console.error("Catch error:", error);
+			setRegistrationMessage("Error: " + error.message);
+		} finally {
+			setIsRegistering(false);
+		}
+	};
 
 	useEffect(() => {
 		const fetchData = async () => {
@@ -234,17 +452,9 @@ export default function PersonalDashboard() {
 					.select("*");
 
 				if (events) {
-					const upcoming = events.slice(0, 3).map(e => ({
-						id: e.event_id,
-						name: e.event_name,
-						venue: e.venue_name,
-						date: e.event_date,
-						time: e.start_time,
-						attendees: e.expected_attendance,
-						status: "Registered"
-					}));
-					setUpcomingEvents(upcoming);
-					setRegisteredEvents(upcoming);
+					// Set upcoming events directly from database
+					setUpcomingEvents(events);
+					setRegisteredEvents(events);
 					setStats(prev => ({ ...prev, registered: events.length }));
 				}
 
@@ -296,6 +506,29 @@ export default function PersonalDashboard() {
 						fetchData();
 					}
 				)
+				.on(
+					"postgres_changes",
+					{
+						event: "*",
+						schema: "public",
+						table: "event_participants",
+					},
+					async (payload) => {
+						// Refresh user registrations when event_participants changes
+						if (participantId) {
+							const { data: userRegistrations } = await supabase
+								.from("event_participants")
+								.select("event_id")
+								.eq("participant_id", participantId);
+							
+							if (userRegistrations) {
+								const registeredIds = new Set(userRegistrations.map(r => r.event_id));
+								setUserRegisteredEventIds(registeredIds);
+								console.log("✓ Updated registrations:", registeredIds);
+							}
+						}
+					}
+				)
 				.subscribe();
 
 			// Auto-refresh every 5 seconds as fallback
@@ -307,6 +540,162 @@ export default function PersonalDashboard() {
 			};
 		}
 	}, [isAuthorized]);
+
+	// Fetch user's registered events when participantId is available
+	useEffect(() => {
+		if (participantId) {
+			const fetchUserRegistrations = async () => {
+				try {
+					const supabase = createClient();
+					const { data: userRegistrations } = await supabase
+						.from("event_participants")
+						.select("event_id")
+						.eq("participant_id", participantId);
+					
+					if (userRegistrations) {
+						const registeredIds = new Set(userRegistrations.map(r => r.event_id));
+						setUserRegisteredEventIds(registeredIds);
+						console.log("✓ Loaded user registrations:", registeredIds);
+					}
+				} catch (error) {
+					console.error("Error fetching user registrations:", error);
+				}
+			};
+			
+			fetchUserRegistrations();
+		}
+	}, [participantId]);
+
+	useEffect(() => {
+		const loadProfileData = async () => {
+			try {
+				const loginId = localStorage.getItem("loginId");
+				const firstName = localStorage.getItem("firstName") || "";
+				const lastName = localStorage.getItem("lastName") || "";
+				const email = localStorage.getItem("email") || "";
+
+				console.log("Loading profile for loginId:", loginId);
+
+				// First set the login info immediately
+				setProfileData(prev => ({
+					...prev,
+					fullName: `${firstName} ${lastName}`.trim(),
+					email: email,
+				}));
+
+				// Then fetch the phone and id_number from database
+				if (loginId) {
+					const supabase = createClient();
+					const { data: loginUserArray, error } = await supabase
+						.from("login_details")
+						.select("phone, id_number")
+						.eq("login_id", parseInt(loginId, 10));
+
+					console.log("Database query result:", { data: loginUserArray, error });
+
+					if (error) {
+						console.error("Error fetching profile:", error);
+					} else if (loginUserArray && loginUserArray.length > 0) {
+						const loginUser = loginUserArray[0];
+						const idNum = loginUser.id_number ? String(loginUser.id_number) : "";
+						const phoneNum = loginUser.phone ? String(loginUser.phone) : "";
+						
+						console.log("Setting profile data:", { idNum, phoneNum });
+						
+						setProfileData(prev => ({
+							...prev,
+							idNumber: idNum,
+							phone: phoneNum,
+						}));
+					} else {
+						console.warn("No data returned from database");
+					}
+				} else {
+					console.warn("No loginId in localStorage");
+				}
+			} catch (error) {
+				console.error("Error loading profile data:", error);
+			}
+		};
+
+		loadProfileData();
+	}, []);
+
+	const handleProfileChange = (e) => {
+		const { name, value } = e.target;
+		setProfileData(prev => ({
+			...prev,
+			[name]: value,
+		}));
+	};
+
+	const handleSaveProfile = async (e) => {
+		e.preventDefault();
+		setIsSavingProfile(true);
+		setProfileMessage("");
+
+		try {
+			const loginId = localStorage.getItem("loginId");
+			if (!loginId) {
+				setProfileMessage("Error: Login session not found. Please log in again.");
+				setIsSavingProfile(false);
+				return;
+			}
+
+			const supabase = createClient();
+			
+			// Build update object for login_details
+			const updateData = {};
+
+			// Handle id_number
+			const idStr = profileData.idNumber.trim();
+			if (idStr) {
+				const idNum = parseInt(idStr, 10);
+				if (!isNaN(idNum)) {
+					updateData.id_number = idNum;
+				}
+			} else {
+				updateData.id_number = null;
+			}
+
+			// Handle phone - convert to integer if value exists
+			const phoneStr = profileData.phone.trim();
+			if (phoneStr) {
+				const digitsOnly = phoneStr.replace(/\D/g, '');
+				if (digitsOnly) {
+					updateData.phone = parseInt(digitsOnly, 10);
+				} else {
+					updateData.phone = null;
+				}
+			} else {
+				updateData.phone = null;
+			}
+
+			console.log("Updating login_details with:", updateData);
+
+			const { data, error } = await supabase
+				.from("login_details")
+				.update(updateData)
+				.eq("login_id", loginId);
+
+			console.log("Response data:", data);
+			console.log("Response error:", error);
+
+			if (error && error.message) {
+				setProfileMessage(`Error saving profile: ${error.message}`);
+			} else if (error) {
+				setProfileMessage(`Error saving profile`);
+			} else {
+				setProfileMessage("✓ Profile saved successfully!");
+				setTimeout(() => setProfileMessage(""), 3000);
+			}
+		} catch (error) {
+			setProfileMessage(`Error: ${error.message}`);
+			console.error("Exception:", error);
+		} finally {
+			setIsSavingProfile(false);
+		}
+	};
 
 	if (!isAuthorized) return null;
 
@@ -349,6 +738,33 @@ export default function PersonalDashboard() {
 							</div>
 						</section>
 
+						{/* Behavior Analytics */}
+						<section id="behavior" className="space-y-4">
+							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
+								Behavior & Performance
+							</h2>
+							{participantId ? (
+								<BehaviorAnalyticsCard participantId={participantId} />
+							) : (
+								<div
+									className="rounded-lg border p-8"
+									style={{
+										backgroundColor: "var(--surface)",
+										borderColor: "var(--border-subtle)",
+									}}
+								>
+									<div className="text-center">
+										<p style={{ color: "var(--text-muted)" }} className="text-sm mb-2">
+											Behavior Analytics Not Available
+										</p>
+										<p style={{ color: "var(--text-muted)" }} className="text-xs">
+											Your behavior analytics will be available once your profile is linked to event records. Start attending events to see your behavior classification.
+										</p>
+									</div>
+								</div>
+							)}
+						</section>
+
 						{/* Profile Setup */}
 						<section id="profile" className="space-y-4">
 							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
@@ -361,77 +777,107 @@ export default function PersonalDashboard() {
 									borderColor: "var(--border-subtle)",
 								}}
 							>
-								<div className="grid gap-4 md:grid-cols-2">
-									<div>
-										<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
-											Full Name
-										</label>
-										<input
-											type="text"
-											placeholder="John Doe"
-											className="w-full rounded-lg border px-3 py-2 text-sm"
-											style={{
-												backgroundColor: "var(--page-bg)",
-												borderColor: "var(--border-subtle)",
-												color: "var(--foreground)",
-											}}
-										/>
+								{profileMessage && (
+									<div
+										className="mb-4 rounded-lg p-3 text-sm"
+										style={{
+											backgroundColor: profileMessage.includes("Error") 
+												? "rgba(239, 68, 68, 0.1)" 
+												: "rgba(16, 185, 129, 0.1)",
+											color: profileMessage.includes("Error") ? "#ef4444" : "#10b981",
+											borderLeft: `4px solid ${profileMessage.includes("Error") ? "#ef4444" : "#10b981"}`,
+										}}
+									>
+										{profileMessage}
 									</div>
-									<div>
-										<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
-											Email
-										</label>
-										<input
-											type="email"
-											placeholder="john@example.com"
-											className="w-full rounded-lg border px-3 py-2 text-sm"
-											style={{
-												backgroundColor: "var(--page-bg)",
-												borderColor: "var(--border-subtle)",
-												color: "var(--foreground)",
-											}}
-										/>
+								)}
+								<form onSubmit={handleSaveProfile}>
+									<div className="grid gap-4 md:grid-cols-2">
+										<div>
+											<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
+												Full Name (from login)
+											</label>
+											<input
+												type="text"
+												disabled
+												value={profileData.fullName}
+												placeholder="Full Name"
+												className="w-full rounded-lg border px-3 py-2 text-sm opacity-60"
+												style={{
+													backgroundColor: "var(--page-bg)",
+													borderColor: "var(--border-subtle)",
+													color: "var(--text-muted)",
+													cursor: "not-allowed",
+												}}
+											/>
+										</div>
+										<div>
+											<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
+												Email (from login)
+											</label>
+											<input
+												type="email"
+												disabled
+												value={profileData.email}
+												placeholder="Email"
+												className="w-full rounded-lg border px-3 py-2 text-sm opacity-60"
+												style={{
+													backgroundColor: "var(--page-bg)",
+													borderColor: "var(--border-subtle)",
+													color: "var(--text-muted)",
+													cursor: "not-allowed",
+												}}
+											/>
+										</div>
+										<div>
+											<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
+												ID Number
+											</label>
+											<input
+												type="text"
+												name="idNumber"
+												value={profileData.idNumber}
+												onChange={handleProfileChange}
+												placeholder="Enter your ID number"
+												className="w-full rounded-lg border px-3 py-2 text-sm"
+												style={{
+													backgroundColor: "var(--page-bg)",
+													borderColor: "var(--border-subtle)",
+													color: "var(--foreground)",
+												}}
+											/>
+										</div>
+										<div>
+											<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
+												Phone
+											</label>
+											<input
+												type="tel"
+												name="phone"
+												value={profileData.phone}
+												onChange={handleProfileChange}
+												placeholder="Enter your phone number"
+												className="w-full rounded-lg border px-3 py-2 text-sm"
+												style={{
+													backgroundColor: "var(--page-bg)",
+													borderColor: "var(--border-subtle)",
+													color: "var(--foreground)",
+												}}
+											/>
+										</div>
 									</div>
-									<div>
-										<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
-											ID Number
-										</label>
-										<input
-											type="text"
-											placeholder="ID-001234567"
-											className="w-full rounded-lg border px-3 py-2 text-sm"
-											style={{
-												backgroundColor: "var(--page-bg)",
-												borderColor: "var(--border-subtle)",
-												color: "var(--foreground)",
-											}}
-										/>
-									</div>
-									<div>
-										<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
-											Phone
-										</label>
-										<input
-											type="tel"
-											placeholder="+1 (555) 123-4567"
-											className="w-full rounded-lg border px-3 py-2 text-sm"
-											style={{
-												backgroundColor: "var(--page-bg)",
-												borderColor: "var(--border-subtle)",
-												color: "var(--foreground)",
-											}}
-										/>
-									</div>
-								</div>
-								<button
-									className="mt-6 w-full rounded-lg px-6 py-2 font-semibold text-sm transition hover:opacity-90"
-									style={{
-										backgroundColor: "#10b981",
-										color: "white",
-									}}
-								>
-									Save Profile
-								</button>
+									<button
+										type="submit"
+										disabled={isSavingProfile}
+										className="mt-6 w-full rounded-lg px-6 py-2 font-semibold text-sm transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+										style={{
+											backgroundColor: "#10b981",
+											color: "white",
+										}}
+									>
+										{isSavingProfile ? "Saving..." : "Save Profile"}
+									</button>
+								</form>
 							</div>
 						</section>
 
@@ -456,16 +902,315 @@ export default function PersonalDashboard() {
 								<input
 									type="text"
 									placeholder="Search events..."
+									value={searchQuery}
+									onChange={(e) => setSearchQuery(e.target.value)}
 									className="w-full bg-transparent pl-8 text-sm focus:outline-none"
 									style={{ color: "var(--foreground)" }}
 								/>
 							</div>
 
-							<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-								{upcomingEvents.map((event) => (
-									<EventCard key={event.id} event={event} />
-								))}
+							{/* Filtered Events */}
+							{(() => {
+								const filteredEvents = upcomingEvents.filter(event =>
+									event.event_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+									(event.venue_name && event.venue_name.toLowerCase().includes(searchQuery.toLowerCase()))
+								);
+
+								// Show up to 6 events, or all if searching
+								const displayedEvents = searchQuery.length > 0 ? filteredEvents : filteredEvents.slice(0, 6);
+
+								return (
+									<>
+										<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+											{displayedEvents.length > 0 ? (
+												displayedEvents.map((event) => (
+													<EventCard
+														key={event.event_id}
+														event={event}
+														onViewDetails={handleViewEventDetails}
+														isRegistered={userRegisteredEventIds.has(event.event_id)}
+													/>
+												))
+											) : (
+												<div
+													className="col-span-full text-center py-8 rounded-lg border"
+													style={{
+														backgroundColor: "var(--page-bg-soft)",
+														borderColor: "var(--border-subtle)",
+														color: "var(--text-muted)",
+													}}
+												>
+													<p>{searchQuery.length > 0 ? "No events match your search" : "No events available"}</p>
+												</div>
+											)}
+										</div>
+
+										{searchQuery.length === 0 && filteredEvents.length > 6 && (
+											<div className="text-center mt-4">
+												<p style={{ color: "var(--text-muted)" }} className="text-sm">
+													Showing 6 of {filteredEvents.length} events • Use search to find more
+												</p>
+											</div>
+										)}
+
+										{searchQuery.length > 0 && filteredEvents.length > 0 && (
+											<div className="text-center mt-4">
+												<p style={{ color: "var(--text-muted)" }} className="text-sm">
+													Showing {filteredEvents.length} matching event{filteredEvents.length !== 1 ? "s" : ""}
+												</p>
+											</div>
+										)}
+									</>
+								);
+							})()}
+
+						{/* Event Details Modal */}
+						{selectedEvent && (
+							<div
+								className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+								onClick={() => setSelectedEvent(null)}
+								style={{
+									backgroundColor: "rgba(0, 0, 0, 0.7)",
+								}}
+							>
+								<div
+									className="w-full max-w-lg rounded-lg shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+									onClick={(e) => e.stopPropagation()}
+									style={{
+										backgroundColor: "var(--surface)",
+									}}
+								>
+									{/* Header */}
+									<div
+										className="p-6 border-b"
+										style={{
+											backgroundColor: "var(--page-bg-soft)",
+											borderColor: "var(--border-subtle)",
+										}}
+									>
+										<div className="flex items-start justify-between">
+											<div>
+												<h2 className="text-xl font-bold" style={{ color: "var(--foreground)" }}>
+													{selectedEvent.event_name}
+												</h2>
+												<p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+													Event Details & Registration
+												</p>
+											</div>
+											<button
+												onClick={() => setSelectedEvent(null)}
+												className="p-2 hover:opacity-70 transition"
+												style={{ color: "var(--foreground)" }}
+											>
+												<X size={20} />
+											</button>
+										</div>
+									</div>
+
+									{/* Body */}
+									<div className="p-6 space-y-4">
+										{/* Event Details */}
+										{!showRFIDStep ? (
+											<>
+												<div className="space-y-3 pb-6 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+													<div className="flex items-center gap-3">
+														<MapPin size={16} style={{ color: "#10b981" }} />
+														<div>
+															<p className="text-xs" style={{ color: "var(--text-muted)" }}>Location</p>
+															<p className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+																{selectedEvent.venue_name || "TBA"}
+															</p>
+														</div>
+													</div>
+													<div className="flex items-center gap-3">
+														<Calendar size={16} style={{ color: "#3b82f6" }} />
+														<div>
+															<p className="text-xs" style={{ color: "var(--text-muted)" }}>Date</p>
+															<p className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+																{new Date(selectedEvent.event_date).toLocaleDateString("en-US", {
+																	weekday: "long",
+																	year: "numeric",
+																	month: "long",
+																	day: "numeric",
+																})}
+															</p>
+														</div>
+													</div>
+													<div className="flex items-center gap-3">
+														<Clock size={16} style={{ color: "#f59e0b" }} />
+														<div>
+															<p className="text-xs" style={{ color: "var(--text-muted)" }}>Time</p>
+															<p className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+																{selectedEvent.start_time || "TBA"} - {selectedEvent.end_time || "TBA"}
+															</p>
+														</div>
+													</div>
+													<div className="flex items-center gap-3">
+														<Users size={16} style={{ color: "#ec4899" }} />
+														<div>
+															<p className="text-xs" style={{ color: "var(--text-muted)" }}>Expected Attendance</p>
+															<p className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+																{selectedEvent.expected_attendance || 0} participants
+															</p>
+														</div>
+													</div>
+													{selectedEvent.full_address && (
+														<div className="flex items-start gap-3">
+															<MapPin size={16} style={{ color: "#8b5cf6" }} className="mt-0.5" />
+															<div>
+																<p className="text-xs" style={{ color: "var(--text-muted)" }}>Full Address</p>
+																<p className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+																	{selectedEvent.full_address}
+																</p>
+															</div>
+														</div>
+													)}
+												</div>
+
+												{/* Status Message */}
+												{registrationMessage && (
+													<div
+														className="rounded-lg p-3 text-sm"
+														style={{
+															backgroundColor: registrationMessage.includes("Error")
+																? "rgba(239, 68, 68, 0.1)"
+																: "rgba(16, 185, 129, 0.1)",
+															color: registrationMessage.includes("Error") ? "#ef4444" : "#10b981",
+															borderLeft: `4px solid ${registrationMessage.includes("Error") ? "#ef4444" : "#10b981"}`,
+														}}
+													>
+														{registrationMessage}
+													</div>
+												)}
+
+												{/* Registration Status */}
+												<div
+													className="rounded-lg p-3 border"
+													style={{
+														backgroundColor: isRegistered ? "rgba(16, 185, 129, 0.1)" : "rgba(59, 130, 246, 0.1)",
+														borderColor: isRegistered ? "#10b981" : "#3b82f6",
+													}}
+												>
+													<p className="text-sm font-semibold" style={{ color: isRegistered ? "#10b981" : "#3b82f6" }}>
+														{isRegistered ? "✓ You are registered for this event" : "Not registered for this event"}
+													</p>
+												</div>
+
+												{/* Action Buttons */}
+												<div className="flex gap-3 pt-4">
+													{isRegistered ? (
+														<button
+															onClick={handleUnregisterEvent}
+															disabled={isRegistering}
+															className="flex-1 rounded-lg px-4 py-2 font-semibold text-sm transition disabled:opacity-50"
+															style={{
+																backgroundColor: "#ef4444",
+																color: "white",
+															}}
+														>
+															{isRegistering ? "Processing..." : "Unregister"}
+														</button>
+													) : (
+														<button
+															onClick={handleRegisterEvent}
+															disabled={isRegistering}
+															className="flex-1 rounded-lg px-4 py-2 font-semibold text-sm transition disabled:opacity-50"
+															style={{
+																backgroundColor: "#10b981",
+																color: "white",
+															}}
+														>
+															{isRegistering ? "Registering..." : "Register for Event"}
+														</button>
+													)}
+													<button
+														onClick={() => setSelectedEvent(null)}
+														className="flex-1 rounded-lg px-4 py-2 font-semibold text-sm transition"
+														style={{
+															backgroundColor: "rgba(107, 114, 128, 0.1)",
+															color: "var(--foreground)",
+														}}
+													>
+														Close
+													</button>
+												</div>
+											</>
+										) : (
+											/* RFID Registration Step */
+											<div className="space-y-4">
+												<div className="rounded-lg p-4 text-center" style={{ backgroundColor: "rgba(16, 185, 129, 0.1)" }}>
+													<Smartphone size={32} style={{ color: "#10b981", margin: "0 auto" }} />
+													<p className="mt-3 font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+														RFID Card Registration
+													</p>
+													<p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+														Tap or enter your RFID card code
+													</p>
+												</div>
+
+												<div>
+													<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
+														RFID Code
+													</label>
+													<input
+														type="text"
+														value={rfidCode}
+														onChange={(e) => setRfidCode(e.target.value)}
+														placeholder="Enter RFID code or tap card"
+														autoFocus
+														className="w-full rounded-lg border px-3 py-2 text-sm"
+														style={{
+															backgroundColor: "var(--page-bg)",
+															borderColor: "var(--border-subtle)",
+															color: "var(--foreground)",
+														}}
+													/>
+												</div>
+
+												{registrationMessage && (
+													<div
+														className="rounded-lg p-3 text-sm"
+														style={{
+															backgroundColor: registrationMessage.includes("Error")
+																? "rgba(239, 68, 68, 0.1)"
+																: "rgba(16, 185, 129, 0.1)",
+															color: registrationMessage.includes("Error") ? "#ef4444" : "#10b981",
+															borderLeft: `4px solid ${registrationMessage.includes("Error") ? "#ef4444" : "#10b981"}`,
+														}}
+													>
+														{registrationMessage}
+													</div>
+												)}
+
+												<div className="flex gap-3 pt-4">
+													<button
+														onClick={handleRFIDSubmit}
+														disabled={isRegistering}
+														className="flex-1 rounded-lg px-4 py-2 font-semibold text-sm transition disabled:opacity-50"
+														style={{
+															backgroundColor: "#3b82f6",
+															color: "white",
+														}}
+													>
+														{isRegistering ? "Saving..." : "Submit RFID"}
+													</button>
+													<button
+														onClick={() => setShowRFIDStep(false)}
+														className="flex-1 rounded-lg px-4 py-2 font-semibold text-sm transition"
+														style={{
+															backgroundColor: "rgba(107, 114, 128, 0.1)",
+															color: "var(--foreground)",
+														}}
+													>
+														Back
+													</button>
+												</div>
+											</div>
+										)}
+									</div>
+								</div>
 							</div>
+						)}
 						</section>
 
 						{/* Attendance Setup */}
@@ -590,63 +1335,79 @@ export default function PersonalDashboard() {
 							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
 								Event History
 							</h2>
-							<div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--border-subtle)" }}>
-								<table className="w-full text-sm">
-									<thead>
-										<tr style={{ backgroundColor: "var(--surface-soft)", borderColor: "var(--border-subtle)" }} className="border-b">
-											<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Event
-											</th>
-											<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Date
-											</th>
-											<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Status
-											</th>
-										</tr>
-									</thead>
-									<tbody>
-										{registeredEvents.map((event, idx) => (
-											<tr
-												key={event.id}
-												style={{
-													backgroundColor: "var(--surface)",
-													borderColor: "var(--border-subtle)",
-												}}
-												className={idx !== registeredEvents.length - 1 ? "border-b" : ""}
-											>
-												<td className="px-4 py-3 font-medium" style={{ color: "var(--foreground)" }}>
-													{event.name}
-												</td>
-												<td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
-													{event.date}
-												</td>
-												<td className="px-4 py-3">
-													<span
-														className="rounded-full px-2 py-1 text-xs font-semibold"
-														style={{
-															backgroundColor:
-																event.status === "Completed"
-																	? "rgba(16, 185, 129, 0.15)"
-																	: event.status === "Upcoming"
-																		? "rgba(59, 130, 246, 0.15)"
-																		: "rgba(251, 146, 60, 0.15)",
-															color:
-																event.status === "Completed"
-																	? "#10b981"
-																	: event.status === "Upcoming"
-																		? "#3b82f6"
-																		: "#fb923c",
-														}}
-													>
-														{event.status}
-													</span>
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
+							{(() => {
+								// Show only events the user is registered for
+								const userRegisteredEvents = upcomingEvents.filter(event => 
+									userRegisteredEventIds.has(event.event_id)
+								);
+
+								return (
+									<div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--border-subtle)" }}>
+										<table className="w-full text-sm">
+											<thead>
+												<tr style={{ backgroundColor: "var(--surface-soft)", borderColor: "var(--border-subtle)" }} className="border-b">
+													<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+														Event
+													</th>
+													<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+														Date
+													</th>
+													<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+														Status
+													</th>
+												</tr>
+											</thead>
+											<tbody>
+												{userRegisteredEvents.length > 0 ? (
+													userRegisteredEvents.map((event, idx) => {
+														const eventStatus = new Date(event.event_date) > new Date() ? "Upcoming" : "Completed";
+														return (
+															<tr
+																key={event.event_id}
+																style={{
+																	backgroundColor: "var(--surface)",
+																	borderColor: "var(--border-subtle)",
+																}}
+																className={idx !== userRegisteredEvents.length - 1 ? "border-b" : ""}
+															>
+																<td className="px-4 py-3 font-medium" style={{ color: "var(--foreground)" }}>
+																	{event.event_name}
+																</td>
+																<td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
+																	{new Date(event.event_date).toLocaleDateString()}
+																</td>
+																<td className="px-4 py-3">
+																	<span
+																		className="rounded-full px-2 py-1 text-xs font-semibold"
+																		style={{
+																			backgroundColor:
+																				eventStatus === "Completed"
+																					? "rgba(16, 185, 129, 0.15)"
+																					: "rgba(59, 130, 246, 0.15)",
+																			color:
+																				eventStatus === "Completed"
+																					? "#10b981"
+																					: "#3b82f6",
+																		}}
+																	>
+																		{eventStatus}
+																	</span>
+																</td>
+															</tr>
+														);
+													})
+												) : (
+													<tr>
+														<td colSpan="3" className="px-4 py-6 text-center" style={{ color: "var(--text-muted)" }}>
+															No registered events yet. Browse events and register to get started!
+														</td>
+													</tr>
+												)}
+											</tbody>
+										</table>
+									</div>
+								);
+							})()}
 						</section>
 					</div>
 				</main>

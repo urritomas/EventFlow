@@ -184,8 +184,17 @@ export default function LoginPage() {
 					return;
 				}
 
+				// Store login info
 				localStorage.setItem("isLoggedIn", "true");
 				localStorage.setItem("userRole", "personal");
+				localStorage.setItem("loginId", String(personalUser.login_id));
+				localStorage.setItem("firstName", personalUser.first_name || "");
+				localStorage.setItem("lastName", personalUser.last_name || "");
+				localStorage.setItem("email", personalUser.email_address || "");
+				
+				console.log("✓ Login successful for:", personalUser.first_name, personalUser.last_name);
+				console.log("✓ Stored login_id:", personalUser.login_id);
+
 				setSubmitMessage(`Welcome back, ${personalUser.first_name}! Redirecting to your dashboard...`);
 				setTimeout(() => {
 					window.location.href = "/personalDashboard";
