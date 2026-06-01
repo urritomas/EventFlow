@@ -13,15 +13,13 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-const SCAN_INTERVAL_MS = 2000;   // scan every 2 seconds
-const RESULT_HOLD_MS   = 3500;   // show result for 3.5 seconds before resetting
-const WARMUP_MS        = 1500;   // wait for camera to warm up
+const SCAN_INTERVAL_MS = 2000;
+const RESULT_HOLD_MS   = 2500;
+const WARMUP_MS        = 1500;
 
 export default function AttendanceScannerPage() {
   const router = useRouter();
 
-  // ── Auth guard ────────────────────────────────────────────────────────────────
   const [isAuthorized, setIsAuthorized] = useState(false);
   useEffect(() => {
     const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -33,27 +31,26 @@ export default function AttendanceScannerPage() {
     }
   }, [router]);
 
-  // ── Refs ──────────────────────────────────────────────────────────────────────
-  const videoRef        = useRef(null);
-  const canvasRef       = useRef(null);
-  const streamRef       = useRef(null);
-  const scanTimerRef    = useRef(null);
-  const resetTimerRef   = useRef(null);
+  const videoRef      = useRef(null);
+  const canvasRef     = useRef(null);
+  const streamRef     = useRef(null);
+  const scanTimerRef  = useRef(null);
+  const resetTimerRef = useRef(null);
 
-  // ── State ─────────────────────────────────────────────────────────────────────
-  const [cameraReady,  setCameraReady]  = useState(false);
-  const [cameraError,  setCameraError]  = useState("");
-  const [apiOnline,    setApiOnline]    = useState(null); // null=checking, true, false
-  const [activeEvent,  setActiveEvent]  = useState(null);
-  const [scanning,     setScanning]     = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const [apiOnline,   setApiOnline]   = useState(null);
+  const [activeEvent, setActiveEvent] = useState(null);
+  const [scanning,    setScanning]    = useState(false);
 
-  // status: idle | scanning | verified | checked_out | already_done | rejected | no_face
-  const [status,       setStatus]       = useState("idle");
-  const [result,       setResult]       = useState(null);
-  const [checkedIn,    setCheckedIn]    = useState([]);
-  const [totalScans,   setTotalScans]   = useState(0);
+  // status: idle | scanning | verified | already_done | rejected
+  const [status,     setStatus]     = useState("idle");
+  const [result,     setResult]     = useState(null);
+  const [checkedIn,  setCheckedIn]  = useState(new Set());   // student_ids already checked in this session
+  const [logEntries, setLogEntries] = useState([]);   // display list
+  const [totalScans, setTotalScans] = useState(0);
 
-  // ── Check API health ──────────────────────────────────────────────────────────
+  // ── Health check ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isAuthorized) return;
     const checkHealth = async () => {
@@ -71,7 +68,7 @@ export default function AttendanceScannerPage() {
     return () => clearInterval(interval);
   }, [isAuthorized]);
 
-  // ── Start camera ──────────────────────────────────────────────────────────────
+  // ── Camera ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isAuthorized) return;
     const startCamera = async () => {
@@ -97,7 +94,7 @@ export default function AttendanceScannerPage() {
   }, [isAuthorized]);
 
   // ── Capture + verify ──────────────────────────────────────────────────────────
-  const captureAndVerify = useCallback(async () => {
+  const captureAndVerify = useCallback(async (alreadyCheckedIn) => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const video  = videoRef.current;
@@ -119,13 +116,10 @@ export default function AttendanceScannerPage() {
       });
       const data = await res.json();
 
-      if (!res.ok) {
-        setStatus("idle");
-        return;
-      }
+      console.log("[verify-face response]", { status: res.status, data });
 
-      if (!data.verified && data.similarity === 0) {
-        // No face detected — silently go back to idle
+      if (!res.ok || (!data.verified && data.similarity === 0)) {
+        // No face or API error — silently reset
         setStatus("idle");
         return;
       }
@@ -133,41 +127,28 @@ export default function AttendanceScannerPage() {
       setResult(data);
 
       if (data.verified) {
-        const action = data.action || "verified";
+        const sid = data.student_id;
 
-        if (action === "already_completed") {
+        if (alreadyCheckedIn.has(sid)) {
+          // Already checked in this session — show briefly then skip
           setStatus("already_done");
-        } else if (action === "checked_out") {
-          setStatus("checked_out");
-          setCheckedIn((prev) =>
-            prev.map((p) =>
-              p.student_id === data.student_id
-                ? { ...p, checked_out: true, check_out_time: new Date().toLocaleTimeString() }
-                : p
-            )
-          );
         } else {
-          // checked_in
+          // New check-in
           setStatus("verified");
-          setCheckedIn((prev) => {
-            if (prev.find((p) => p.student_id === data.student_id)) return prev;
-            return [
-              {
-                name:         data.name,
-                student_id:   data.student_id,
-                time:         new Date().toLocaleTimeString(),
-                checked_out:  false,
-                check_out_time: null,
-              },
-              ...prev,
-            ];
-          });
+          setCheckedIn((prev) => new Set([...prev, sid]));
+          const newEntry = {
+            name:       data.name,
+            student_id: sid,
+            time:       new Date().toLocaleTimeString(),
+          };
+          console.log("Adding to logEntries:", newEntry);
+          setLogEntries((prev) => [newEntry, ...prev]);
         }
       } else {
         setStatus("rejected");
       }
 
-      // Auto-reset after showing result
+      // Auto-reset after showing result — move to next person
       resetTimerRef.current = setTimeout(() => {
         setStatus("idle");
         setResult(null);
@@ -179,12 +160,18 @@ export default function AttendanceScannerPage() {
   }, []);
 
   // ── Auto-scan loop ────────────────────────────────────────────────────────────
+  // Pass current checkedIn set into captureAndVerify so it always has latest state
+  const checkedInRef = useRef(checkedIn);
+  useEffect(() => { checkedInRef.current = checkedIn; }, [checkedIn]);
+
   useEffect(() => {
     if (!cameraReady || !scanning) return;
 
     scanTimerRef.current = setInterval(() => {
       setStatus((current) => {
-        if (current === "idle") captureAndVerify();
+        if (current === "idle") {
+          captureAndVerify(checkedInRef.current);
+        }
         return current;
       });
     }, SCAN_INTERVAL_MS);
@@ -192,49 +179,32 @@ export default function AttendanceScannerPage() {
     return () => clearInterval(scanTimerRef.current);
   }, [cameraReady, scanning, captureAndVerify]);
 
-  // ── UI helpers ────────────────────────────────────────────────────────────────
+  // ── Status config ─────────────────────────────────────────────────────────────
   const statusConfig = {
     idle: {
-      border:  "border-blue-500/30",
-      label:   scanning ? "Scanning…" : "Press Start to begin",
-      color:   "text-slate-400",
-      bg:      "",
+      border: "border-blue-500/30",
+      label:  scanning ? "Scanning…" : "Press Start to begin",
+      color:  "text-slate-400",
     },
     scanning: {
-      border:  "border-yellow-400/60",
-      label:   "Analyzing face…",
-      color:   "text-yellow-400",
-      bg:      "",
+      border: "border-yellow-400/60",
+      label:  "Analyzing face…",
+      color:  "text-yellow-400",
     },
     verified: {
-      border:  "border-emerald-400/80",
-      label:   `✓ Check-in: ${result?.name ?? ""}`,
-      color:   "text-emerald-400",
-      bg:      "bg-emerald-500/5",
-    },
-    checked_out: {
-      border:  "border-blue-400/80",
-      label:   `↩ Check-out: ${result?.name ?? ""}`,
-      color:   "text-blue-400",
-      bg:      "bg-blue-500/5",
+      border: "border-emerald-400/80",
+      label:  `✓ Check-in: ${result?.name ?? ""}`,
+      color:  "text-emerald-400",
     },
     already_done: {
-      border:  "border-yellow-400/60",
-      label:   `${result?.name ?? ""} already completed`,
-      color:   "text-yellow-400",
-      bg:      "",
+      border: "border-slate-500/40",
+      label:  `${result?.name ?? ""} already checked in`,
+      color:  "text-slate-400",
     },
     rejected: {
-      border:  "border-red-400/80",
-      label:   "Not recognized",
-      color:   "text-red-400",
-      bg:      "bg-red-500/5",
-    },
-    no_face: {
-      border:  "border-slate-500/30",
-      label:   "No face detected",
-      color:   "text-slate-500",
-      bg:      "",
+      border: "border-red-400/80",
+      label:  "Not recognized",
+      color:  "text-red-400",
     },
   };
 
@@ -243,11 +213,9 @@ export default function AttendanceScannerPage() {
   if (!isAuthorized) return null;
 
   return (
-    <div
-      className="min-h-screen themed-screen"
-      style={{ backgroundColor: "var(--page-bg)" }}
-    >
-      {/* ── Top bar ── */}
+    <div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>
+
+      {/* Top bar */}
       <div
         className="sticky top-0 z-20 border-b px-6 py-3 flex items-center gap-4"
         style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}
@@ -266,7 +234,6 @@ export default function AttendanceScannerPage() {
           </h1>
         </div>
 
-        {/* API status */}
         <div className="ml-auto flex items-center gap-2">
           {apiOnline === null ? (
             <span className="text-xs text-slate-500">Checking API…</span>
@@ -292,9 +259,7 @@ export default function AttendanceScannerPage() {
           >
             <Clock size={16} style={{ color: "#3b82f6" }} />
             <div>
-              <span className="text-xs font-semibold uppercase tracking-wider text-blue-400">
-                Active Event
-              </span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-blue-400">Active Event</span>
               <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
                 {activeEvent.event_name}
               </p>
@@ -312,9 +277,36 @@ export default function AttendanceScannerPage() {
           </div>
         )}
 
+        {/* Attendance Summary Card */}
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div
+            className="rounded-2xl border px-6 py-4"
+            style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Scans</p>
+            <p className="mt-2 text-3xl font-bold" style={{ color: "#3b82f6" }}>{totalScans}</p>
+          </div>
+          <div
+            className="rounded-2xl border px-6 py-4"
+            style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Checked In</p>
+            <p className="mt-2 text-3xl font-bold" style={{ color: "#10b981" }}>{logEntries.length}</p>
+          </div>
+          <div
+            className="rounded-2xl border px-6 py-4"
+            style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Status</p>
+            <p className="mt-2 text-lg font-bold" style={{ color: scanning ? "#f59e0b" : "#6b7280" }}>
+              {scanning ? "Scanning" : "Idle"}
+            </p>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
 
-          {/* ── Camera panel ── */}
+          {/* Camera panel */}
           <div className="flex w-full flex-col gap-4 lg:w-[520px] lg:shrink-0">
 
             {cameraError ? (
@@ -326,17 +318,10 @@ export default function AttendanceScannerPage() {
               </div>
             ) : (
               <div
-                className={`relative overflow-hidden rounded-2xl border-4 transition-all duration-500 ${cfg.border} ${cfg.bg}`}
+                className={`relative overflow-hidden rounded-2xl border-4 transition-all duration-500 ${cfg.border}`}
                 style={{ aspectRatio: "4/3" }}
               >
-                {/* Live feed */}
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="h-full w-full object-cover"
-                />
+                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
                 <canvas ref={canvasRef} className="hidden" />
 
                 {/* Corner brackets */}
@@ -347,23 +332,20 @@ export default function AttendanceScannerPage() {
                   <div className="absolute bottom-3 right-3 h-8 w-8 border-b-2 border-r-2 border-blue-400/50" />
                 </div>
 
-                {/* Scan line animation */}
+                {/* Scan line */}
                 {scanning && status === "idle" && (
                   <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 animate-[scan_2s_ease-in-out_infinite] bg-blue-400/60" />
                 )}
 
-                {/* Status overlay */}
+                {/* Status bar */}
                 <div className="absolute bottom-0 inset-x-0 flex items-center justify-center gap-2 bg-black/60 py-2.5 backdrop-blur-sm">
-                  {status === "scanning" && (
-                    <div className="h-3 w-3 animate-ping rounded-full bg-yellow-400" />
-                  )}
-                  {status === "verified" && <CheckCircle size={15} className="text-emerald-400" />}
-                  {status === "checked_out" && <CheckCircle size={15} className="text-blue-400" />}
-                  {status === "rejected" && <XCircle size={15} className="text-red-400" />}
+                  {status === "scanning" && <div className="h-3 w-3 animate-ping rounded-full bg-yellow-400" />}
+                  {status === "verified"  && <CheckCircle size={15} className="text-emerald-400" />}
+                  {status === "rejected"  && <XCircle size={15} className="text-red-400" />}
                   <span className={`text-sm font-semibold ${cfg.color}`}>{cfg.label}</span>
                 </div>
 
-                {/* Not ready overlay */}
+                {/* Camera not ready overlay */}
                 {!cameraReady && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/70">
                     <p className="text-sm text-slate-400">Starting camera…</p>
@@ -374,17 +356,13 @@ export default function AttendanceScannerPage() {
 
             {/* Result card */}
             {result && status !== "idle" && status !== "scanning" && (
-              <div
-                className={`rounded-xl border px-5 py-4 transition-all duration-300 ${
-                  status === "verified"
-                    ? "border-emerald-500/30 bg-emerald-500/10"
-                    : status === "checked_out"
-                    ? "border-blue-500/30 bg-blue-500/10"
-                    : status === "already_done"
-                    ? "border-yellow-500/30 bg-yellow-500/10"
-                    : "border-red-500/30 bg-red-500/10"
-                }`}
-              >
+              <div className={`rounded-xl border px-5 py-4 transition-all duration-300 ${
+                status === "verified"
+                  ? "border-emerald-500/30 bg-emerald-500/10"
+                  : status === "already_done"
+                  ? "border-slate-500/20 bg-slate-500/5"
+                  : "border-red-500/30 bg-red-500/10"
+              }`}>
                 {status === "verified" && (
                   <div className="flex items-center gap-3">
                     <CheckCircle size={28} className="shrink-0 text-emerald-400" />
@@ -397,24 +375,12 @@ export default function AttendanceScannerPage() {
                     </div>
                   </div>
                 )}
-                {status === "checked_out" && (
-                  <div className="flex items-center gap-3">
-                    <CheckCircle size={28} className="shrink-0 text-blue-400" />
-                    <div>
-                      <p className="font-semibold text-slate-100">{result.name}</p>
-                      <p className="text-xs text-slate-400">{result.student_id}</p>
-                      <p className="mt-0.5 text-xs text-blue-400">
-                        Checked out · {(result.similarity * 100).toFixed(1)}% confidence
-                      </p>
-                    </div>
-                  </div>
-                )}
                 {status === "already_done" && (
                   <div className="flex items-center gap-3">
-                    <CheckCircle size={28} className="shrink-0 text-yellow-400" />
+                    <CheckCircle size={28} className="shrink-0 text-slate-400" />
                     <div>
                       <p className="font-semibold text-slate-100">{result.name}</p>
-                      <p className="text-xs text-yellow-400">Already checked in and out</p>
+                      <p className="text-xs text-slate-400">Already checked in this session</p>
                     </div>
                   </div>
                 )}
@@ -432,7 +398,7 @@ export default function AttendanceScannerPage() {
               </div>
             )}
 
-            {/* Start / Stop button */}
+            {/* Start / Stop */}
             <button
               onClick={() => setScanning((s) => !s)}
               disabled={!cameraReady || !apiOnline}
@@ -444,9 +410,27 @@ export default function AttendanceScannerPage() {
             >
               {scanning ? "⏹ Stop Scanning" : "▶ Start Scanning"}
             </button>
+
+            {/* Debug: Test Button */}
+            <button
+              onClick={() => {
+                setLogEntries((prev) => [
+                  {
+                    name: "Test User",
+                    student_id: "STU" + Math.floor(Math.random() * 10000),
+                    time: new Date().toLocaleTimeString(),
+                  },
+                  ...prev,
+                ]);
+                setTotalScans((n) => n + 1);
+              }}
+              className="w-full rounded-2xl py-2 text-xs font-semibold border border-slate-500/30 bg-slate-500/10 text-slate-400 transition hover:bg-slate-500/20"
+            >
+              + Add Test Entry
+            </button>
           </div>
 
-          {/* ── Session log ── */}
+          {/* Session log */}
           <div className="flex-1 rounded-2xl border" style={{ borderColor: "var(--border-subtle)", backgroundColor: "var(--surface)" }}>
             <div
               className="flex items-center justify-between border-b px-5 py-4"
@@ -455,54 +439,43 @@ export default function AttendanceScannerPage() {
               <div className="flex items-center gap-2">
                 <Users size={16} style={{ color: "#3b82f6" }} />
                 <h2 className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
-                  Session Log
+                  Attendance Record
                 </h2>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-slate-400">{totalScans} scans</span>
                 <span
-                  className="rounded-full px-2.5 py-0.5 text-xs font-bold"
-                  style={{ backgroundColor: "rgba(59,130,246,0.15)", color: "#3b82f6" }}
+                  className="rounded-full px-3 py-1 text-xs font-bold"
+                  style={{ backgroundColor: "rgba(16, 185, 129, 0.2)", color: "#10b981" }}
                 >
-                  {checkedIn.length} checked in
+                  {logEntries.length} present
                 </span>
               </div>
             </div>
 
-            <div className="max-h-[480px] overflow-y-auto">
-              {checkedIn.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <Users size={32} className="mb-3 opacity-20" style={{ color: "var(--foreground)" }} />
-                  <p className="text-sm text-slate-500">No participants checked in yet.</p>
-                  <p className="mt-1 text-xs text-slate-600">Start scanning to record attendance.</p>
+            <div className="max-h-[600px] overflow-y-auto">
+              {logEntries.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <Users size={40} className="mb-3 opacity-20" style={{ color: "var(--foreground)" }} />
+                  <p className="text-sm font-medium text-slate-400">No participants checked in yet.</p>
+                  <p className="mt-1 text-xs text-slate-600">Press "Start Scanning" to begin recording attendance.</p>
                 </div>
               ) : (
                 <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
-                  {checkedIn.map((p, i) => (
-                    <li key={i} className="flex items-center gap-3 px-5 py-3">
-                      <div
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                          p.checked_out
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-emerald-500/20 text-emerald-400"
-                        }`}
-                      >
+                  {logEntries.map((p, i) => (
+                    <li key={i} className="flex items-center gap-3 px-5 py-4 hover:bg-white/5 transition">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold text-white" style={{ backgroundColor: "rgba(16, 185, 129, 0.3)", color: "#10b981" }}>
                         {p.name.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="truncate text-sm font-medium" style={{ color: "var(--foreground)" }}>
+                        <p className="truncate text-sm font-semibold" style={{ color: "var(--foreground)" }}>
                           {p.name}
                         </p>
-                        <p className="text-xs text-slate-500">{p.student_id}</p>
+                        <p className="text-xs text-slate-500 truncate">{p.student_id}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-xs text-slate-400">In: {p.time}</p>
-                        {p.checked_out && (
-                          <p className="text-xs text-blue-400">Out: {p.check_out_time}</p>
-                        )}
-                        {!p.checked_out && (
-                          <span className="text-xs text-emerald-400">Present</span>
-                        )}
+                        <p className="text-xs text-slate-400 font-medium">{p.time}</p>
+                        <span className="text-xs font-bold" style={{ color: "#10b981" }}>Checked In</span>
                       </div>
                     </li>
                   ))}
@@ -513,7 +486,6 @@ export default function AttendanceScannerPage() {
         </div>
       </div>
 
-      {/* Scan line keyframe */}
       <style jsx>{`
         @keyframes scan {
           0%   { top: 0%; }

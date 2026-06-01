@@ -408,10 +408,6 @@ async def verify_participant(
     image:          UploadFile = File(...),
     log_attendance: bool       = Form(True),
 ):
-    """
-    Verifies a face against the active event's gallery.
-    Only participants registered for the active event can be matched.
-    """
     event = require_active_event()
 
     if not gallery:
@@ -433,32 +429,55 @@ async def verify_participant(
 
     match, score = engine.match(embedding, gallery)
 
+    action = "verified"
+
     if match and log_attendance:
-        supabase.table("attendance").upsert(
-            {
-                "participant_id": match["participant_id"],
-                "event_id":       event["event_id"],
-                "similarity":     float(score),
-                "verified":       True,
-            },
-            on_conflict="participant_id,event_id",
-        ).execute()
+        # Check if already has a log for this event
+        existing = (
+            supabase.table("attendance_logs")
+            .select("log_id")
+            .eq("participant_id", match["participant_id"])
+            .eq("event_id", event["event_id"])
+            .execute()
+        )
+
+        if not existing.data:
+            # First scan — check in
+            supabase.table("attendance_logs").insert({
+                "participant_id":      match["participant_id"],
+                "event_id":            event["event_id"],
+                "check_in_similarity": float(score),
+                "is_verified":         True,
+            }).execute()
+            action = "checked_in"
+
+        else:
+            action = "already_completed"
 
         logger.info(
-            "Verified: %s (student_id=%s, event='%s', score=%.4f)",
-            match["name"], match["student_id"], event["event_name"], score,
+            "%s: %s (student_id=%s, event='%s', score=%.4f)",
+            action.upper(), match["name"], match["student_id"],
+            event["event_name"], score,
         )
+
+    messages = {
+        "checked_in":        f"Welcome, {match['name']}! Check-in recorded.",
+        "checked_out":       f"Goodbye, {match['name']}! Check-out recorded.",
+        "already_completed": f"{match['name']} has already checked in and out.",
+        "verified":          f"Welcome, {match['name']}!",
+    }
 
     if match:
         return {
             "verified":       True,
+            "action":         action,
             "name":           match["name"],
             "student_id":     match["student_id"],
             "participant_id": match["participant_id"],
             "similarity":     round(score, 4),
             "threshold":      engine.threshold,
             "event_name":     event["event_name"],
-            "message":        f"Welcome, {match['name']}!",
+            "message":        messages.get(action, f"Welcome, {match['name']}!"),
         }
 
     return {
@@ -521,10 +540,6 @@ def delete_participant(student_id: str):
 
 @app.get("/api/attendance")
 def get_attendance(event_id: Optional[int] = None):
-    """
-    Returns attendance records for the given event_id.
-    Defaults to the active event if not specified.
-    """
     filter_id = event_id if event_id is not None else (
         active_event["event_id"] if active_event else None
     )
@@ -533,26 +548,29 @@ def get_attendance(event_id: Optional[int] = None):
         return {"count": 0, "records": [], "message": "No active event."}
 
     res = (
-        supabase.table("attendance")
+        supabase.table("attendance_logs")
         .select(
-            "attendance_id, similarity, verified, verified_at, "
+            "log_id, check_in_similarity, check_out_similarity, "
+            "check_in_at, check_out_at, is_verified, "
             "participants(name, student_id), "
             "events(event_name)"
         )
         .eq("event_id", filter_id)
-        .order("verified_at", desc=True)
+        .order("check_in_at", desc=True)
         .execute()
     )
 
     records = [
         {
-            "attendance_id": r["attendance_id"],
-            "name":          r["participants"]["name"],
-            "student_id":    r["participants"]["student_id"],
-            "event_name":    r["events"]["event_name"],
-            "similarity":    round(r["similarity"], 4),
-            "verified":      r["verified"],
-            "verified_at":   r["verified_at"],
+            "log_id":               r["log_id"],
+            "name":                 r["participants"]["name"],
+            "student_id":           r["participants"]["student_id"],
+            "event_name":           r["events"]["event_name"],
+            "check_in_similarity":  round(r["check_in_similarity"], 4) if r["check_in_similarity"] else None,
+            "check_out_similarity": round(r["check_out_similarity"], 4) if r["check_out_similarity"] else None,
+            "check_in_at":          r["check_in_at"],
+            "check_out_at":         r["check_out_at"],
+            "is_verified":          r["is_verified"],
         }
         for r in (res.data or [])
     ]
