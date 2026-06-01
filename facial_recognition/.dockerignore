@@ -1,0 +1,28 @@
+# facial_recognition/.dockerignore
+# Keeps the Docker image lean by excluding unnecessary files
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Local scripts (not needed on server)
+test_camera.py
+verify.py
+register.py
+admin.py
+
+# Local DB
+*.db
+
+# Environment (injected by Render dashboard, not from file)
+.env
+
+# Git
+.git/
+.gitignore
+
+# Docs
+README.md
