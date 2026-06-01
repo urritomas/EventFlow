@@ -133,7 +133,7 @@ async def lifespan(app: FastAPI):
 
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     engine   = FaceEngine(
-        model_name="buffalo_l",
+        model_name="buffalo_sc",
         det_size=(640, 640),
         threshold=0.45,
         use_gpu=False,
@@ -196,7 +196,7 @@ def health_check():
         "status":       "ok",
         "active_event": active_event,   # None if no event is active
         "gallery_size": len(gallery),
-        "model":        "buffalo_l",
+        "model":        "buffalo_sc",
     }
 
 
