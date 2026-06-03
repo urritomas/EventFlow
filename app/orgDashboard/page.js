@@ -572,25 +572,25 @@ export default function OrgDashboard() {
 												Enabled Features
 											</h3>
 											<div className="space-y-2">
-												{selectedEvent.rfid_enabled && (
+												{selectedEvent.with_RFID && (
 													<div className="flex items-center gap-2">
 														<Check size={16} style={{ color: "#10b981" }} />
 														<span style={{ color: "var(--foreground)" }}>RFID Scanner</span>
 													</div>
 												)}
-												{selectedEvent.face_recognition_enabled && (
+												{selectedEvent.with_FaceId && (
 													<div className="flex items-center gap-2">
 														<Check size={16} style={{ color: "#10b981" }} />
 														<span style={{ color: "var(--foreground)" }}>Face Recognition</span>
 													</div>
 												)}
-												{selectedEvent.geofencing_enabled && (
-													<div className="flex items-center gap-2">
-														<Check size={16} style={{ color: "#10b981" }} />
-														<span style={{ color: "var(--foreground)" }}>Geofencing</span>
-													</div>
-												)}
-											</div>
+											{selectedEvent.with_Geo && (
+												<div className="flex items-center gap-2">
+													<MapPin size={16} style={{ color: "#10b981" }} />
+													<span style={{ color: "var(--foreground)" }}>Geofencing</span>
+												</div>
+											)}
+										</div>
 										</div>
 
 										{/* Status */}

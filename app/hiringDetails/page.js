@@ -6,21 +6,21 @@ import SiteHeader from "../components/SiteHeader";
 
 const serviceOptions = [
 	{
-		key: "rfid",
+		key: "with_RFID",
 		label: "RFID Scanner Attendance",
 		description:
 			"Fast contactless tap-in and tap-out with badge scanning and live attendance logs.",
 		badge: "Core",
 	},
 	{
-		key: "geofencing",
+		key: "with_Geo",
 		label: "Geofencing Validation",
 		description:
 			"Restrict attendance to the approved venue radius and verify location in real time.",
 		badge: "Location",
 	},
 	{
-		key: "facialRecognition",
+		key: "with_FaceId",
 		label: "Facial Recognition Attendance",
 		description:
 			"Confirm identity with biometric face matching to reduce proxy attendance.",
@@ -93,28 +93,33 @@ function Field({ label, children, hint }) {
 }
 
 export default function HiringDetailsPage() {
-	const [formState, setFormState] = useState({
-		fullName: "",
-		organization: "",
-		email: "",
-		phone: "",
-		eventName: "",
-		eventType: "Conference",
-		expectedAttendance: "",
-		eventDate: "",
-		startTime: "",
-		endTime: "",
-		venueName: "",
-		fullAddress: "",
-		notes: "",
-		rfid: true,
-		geofencing: true,
-		facialRecognition: false,
-	});
+  const [formState, setFormState] = useState({
+    fullName: "",
+    organization: "",
+    email: "",
+    phone: "",
+    eventName: "",
+    eventType: "Conference",
+    expectedAttendance: "",
+    eventDate: "",
+    startTime: "",
+    endTime: "",
+    venueName: "",
+    fullAddress: "",
+    notes: "",
+    with_RFID: true,
+    with_Geo: true,
+    with_FaceId: false,
+  });
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [submitMessage, setSubmitMessage] = useState("");
 
-	const selectedServices = serviceOptions.filter((service) => formState[service.key]);
+	const selectedServices = serviceOptions.filter((service) => {
+		if (service.key === "with_RFID") return formState.with_RFID;
+		if (service.key === "with_FaceId") return formState.with_FaceId;
+		if (service.key === "with_Geo") return formState.with_Geo;
+		return false;
+	});
 
 	const estimatedScope = useMemo(() => {
 		const attendance = Number(formState.expectedAttendance || 0);
@@ -127,9 +132,9 @@ export default function HiringDetailsPage() {
 
 	const deploymentChecklist = [
 		["Database ready", "events + clients + attendance records"],
-		["Identity layer", formState.facialRecognition ? "face_embeddings enabled" : "optional for later"],
-		["Location layer", formState.geofencing ? "venue radius validation active" : "can be added later"],
-		["Device layer", formState.rfid ? "RFID scan stations included" : "manual entry fallback"],
+		["Identity layer", formState.with_FaceId ? "face_embeddings enabled" : "optional for later"],
+	["Location layer", formState.with_Geo ? "venue radius validation active" : "can be added later"],
+	["Device layer", formState.with_RFID ? "RFID scan stations included" : "manual entry fallback"],
 	];
 
 	const updateField = (field) => (event) => {
@@ -163,9 +168,9 @@ export default function HiringDetailsPage() {
 				full_address: formState.fullAddress,
 				notes: formState.notes,
 				services_needed: {
-					rfid: formState.rfid,
-					geofencing: formState.geofencing,
-					facial_recognition: formState.facialRecognition,
+					with_RFID: formState.with_RFID,
+					with_Geo: formState.with_Geo,
+					with_FaceId: formState.with_FaceId,
 				},
 				estimated_scope: estimatedScope,
 				status: "pending",
@@ -190,23 +195,23 @@ export default function HiringDetailsPage() {
 
 		setSubmitMessage("Application submitted successfully! We'll review your hiring request and contact you soon.");
 		setFormState({
-				fullName: "",
-				organization: "",
-				email: "",
-				phone: "",
-				eventName: "",
-				eventType: "Conference",
-				expectedAttendance: "",
-				eventDate: "",
-				startTime: "",
-				endTime: "",
-				venueName: "",
-				fullAddress: "",
-				notes: "",
-				rfid: true,
-				geofencing: true,
-				facialRecognition: false,
-			});
+			fullName: "",
+			organization: "",
+			email: "",
+			phone: "",
+			eventName: "",
+			eventType: "Conference",
+			expectedAttendance: "",
+			eventDate: "",
+			startTime: "",
+			endTime: "",
+			venueName: "",
+			fullAddress: "",
+			notes: "",
+			with_RFID: true,
+			with_Geo: true,
+			with_FaceId: false,
+		});
 		} catch (error) {
 			setSubmitMessage(`Error: ${error.message}`);
 		} finally {

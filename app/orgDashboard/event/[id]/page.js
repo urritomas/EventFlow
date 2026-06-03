@@ -23,12 +23,14 @@ import {
 	WifiOff,
 	Camera,
 	CreditCard,
+	Zap,
+	ShieldCheck,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
 	const menuItems = [
 		{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
-		{ label: "Create Event", icon: "📝", href: "/orgDashboard/create-event" },
+		{ label: "Create Event", icon: Zap, href: "/orgDashboard/create-event" },
 		{ label: "Active Events", icon: Calendar, href: "#events" },
 		{ label: "Analytics", icon: TrendingUp, href: "#analytics" },
 	];
@@ -123,13 +125,13 @@ export default function EventDetailsPage() {
 	const [isAuthorized, setIsAuthorized] = useState(false);
 	const [eventData, setEventData] = useState(null);
 	const [loading, setLoading] = useState(true);
-	const [activeTab, setActiveTab] = useState(mode === "checkout" ? "rfid" : "overview"); // overview, attendance, rfid
+	const [activeTab, setActiveTab] = useState("unified-scanner");
 
 	const videoRef = useRef(null);
 	const canvasRef = useRef(null);
 	const [cameraReady, setCameraReady] = useState(false);
 	const [attendees, setAttendees] = useState([]);
-	const [rfidInput, setRfidInput] = useState("");
+	const rfidInput = useRef(null);
 	const [scanResult, setScanResult] = useState(null);
 
 	useEffect(() => {
@@ -205,14 +207,15 @@ export default function EventDetailsPage() {
 	};
 
 	const handleRFIDScan = async (e) => {
-		if (e.key === "Enter" && rfidInput.trim()) {
+		const value = rfidInput.current?.value?.trim();
+		if (e.key === "Enter" && value) {
 			try {
 				const supabase = createClient();
 				// Find participant by RFID
 				const { data: participant } = await supabase
 					.from("participants")
 					.select("*")
-					.eq("rfid_code", rfidInput.trim())
+					.eq("rfid_code", value)
 					.single();
 
 				if (participant) {
@@ -238,7 +241,7 @@ export default function EventDetailsPage() {
 
 							if (!updateError) {
 								setScanResult({ success: true, message: `${participant.name} checked out!` });
-								setRfidInput("");
+								if (rfidInput.current) rfidInput.current.value = "";
 								setTimeout(() => setScanResult(null), 3000);
 								// Refresh attendees
 								const { data: newAttendees } = await supabase
@@ -268,7 +271,7 @@ export default function EventDetailsPage() {
 
 						if (!error) {
 							setScanResult({ success: true, message: `Welcome, ${participant.name}!` });
-							setRfidInput("");
+							if (rfidInput.current) rfidInput.current.value = "";
 							setTimeout(() => setScanResult(null), 3000);
 							// Refresh attendees
 							const { data: newAttendees } = await supabase
@@ -392,22 +395,11 @@ export default function EventDetailsPage() {
 
 						{/* Tabs */}
 						<div className="flex gap-2 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-							{[
-								...(mode === "checkout" 
-									? [{ id: "rfid", label: "RFID Scanner" }]
-									: [
-										{ id: "overview", label: "Overview" },
-										{ id: "rfid", label: "RFID Scanner" },
-										{ id: "face", label: "Face Recognition" },
-										{ id: "attendance", label: "Attendees" },
-										{ id: "analytics", label: "Analytics" },
-									]
-								)
-							].map((tab) => (
+							{[{ id: "overview", label: "Overview", icon: Calendar }, { id: "unified-scanner", label: "Quick Scan", icon: Zap }, { id: "attendance", label: "Attendees", icon: Users }, { id: "analytics", label: "Analytics", icon: TrendingUp }].map((tab) => (
 								<button
 									key={tab.id}
 									onClick={() => setActiveTab(tab.id)}
-									className={`px-4 py-3 font-medium text-sm transition ${
+									className={`px-4 py-3 font-medium text-sm transition flex items-center gap-2 ${
 										activeTab === tab.id ? "border-b-2" : ""
 									}`}
 									style={{
@@ -416,7 +408,19 @@ export default function EventDetailsPage() {
 										borderBottomColor: activeTab === tab.id ? "#3b82f6" : "transparent",
 									}}
 								>
+									<tab.icon size={16} />
 									{tab.label}
+									{tab.id === "unified-scanner" && (
+										<span
+											className="rounded-full px-2 py-0.5 text-xs font-bold"
+											style={{
+												backgroundColor: "rgba(59, 130, 246, 0.15)",
+												color: "#3b82f6",
+											}}
+										>
+											FAST
+										</span>
+									)}
 								</button>
 							))}
 						</div>
@@ -451,40 +455,57 @@ export default function EventDetailsPage() {
 										</p>
 									</div>
 									<div className="grid gap-4 md:grid-cols-3">
-										<div>
-											<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
-												RFID Enabled
-											</h3>
-											<span
-												className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
-												style={{
-													backgroundColor: eventData.rfid_enabled
-														? "rgba(16, 185, 129, 0.1)"
-														: "rgba(107, 114, 128, 0.1)",
-													color: eventData.rfid_enabled ? "#10b981" : "#6b7280",
-												}}
-											>
-												{eventData.rfid_enabled ? <Check size={14} /> : <X size={14} />}
-												{eventData.rfid_enabled ? "Yes" : "No"}
-											</span>
-										</div>
-										<div>
-											<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
-												Face Recognition
-											</h3>
-											<span
-												className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
-												style={{
-													backgroundColor: eventData.face_recognition_enabled
-														? "rgba(16, 185, 129, 0.1)"
-														: "rgba(107, 114, 128, 0.1)",
-													color: eventData.face_recognition_enabled ? "#10b981" : "#6b7280",
-												}}
-											>
-												{eventData.face_recognition_enabled ? <Check size={14} /> : <X size={14} />}
-												{eventData.face_recognition_enabled ? "Yes" : "No"}
-											</span>
-										</div>
+								<div>
+									<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
+										RFID Enabled
+									</h3>
+									<span
+										className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
+										style={{
+											backgroundColor: eventData.with_RFID
+												? "rgba(16, 185, 129, 0.1)"
+												: "rgba(107, 114, 128, 0.1)",
+											color: eventData.with_RFID ? "#10b981" : "#6b7280",
+										}}
+									>
+										{eventData.with_RFID ? <Check size={14} /> : <X size={14} />}
+										{eventData.with_RFID ? "Yes" : "No"}
+									</span>
+								</div>
+								<div>
+									<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
+										Geofencing
+									</h3>
+									<span
+										className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
+										style={{
+											backgroundColor: eventData.with_Geo
+												? "rgba(16, 185, 129, 0.1)"
+												: "rgba(107, 114, 128, 0.1)",
+											color: eventData.with_Geo ? "#10b981" : "#6b7280",
+										}}
+									>
+										{eventData.with_Geo ? <Check size={14} /> : <X size={14} />}
+										{eventData.with_Geo ? "Yes" : "No"}
+									</span>
+								</div>
+								<div>
+									<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
+										Face Recognition
+									</h3>
+									<span
+										className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
+										style={{
+											backgroundColor: eventData.with_FaceId
+												? "rgba(16, 185, 129, 0.1)"
+												: "rgba(107, 114, 128, 0.1)",
+											color: eventData.with_FaceId ? "#10b981" : "#6b7280",
+										}}
+									>
+										{eventData.with_FaceId ? <Check size={14} /> : <X size={14} />}
+										{eventData.with_FaceId ? "Yes" : "No"}
+									</span>
+								</div>
 										<div>
 											<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
 												Status
@@ -515,8 +536,8 @@ export default function EventDetailsPage() {
 							</section>
 						)}
 
-						{/* RFID Scanner Tab */}
-						{activeTab === "rfid" && eventData.rfid_enabled && (
+						{/* Quick Scan Tab */}
+						{activeTab === "unified-scanner" && (eventData.with_FaceId || eventData.with_RFID) && (
 							<section
 								className="rounded-lg border p-6"
 								style={{
@@ -524,93 +545,123 @@ export default function EventDetailsPage() {
 									borderColor: "var(--border-subtle)",
 								}}
 							>
-								<h2 className="mb-4 text-lg font-semibold flex items-center gap-2" style={{ color: "var(--foreground)" }}>
-									<CreditCard size={20} />
-									RFID Card Scanner
-								</h2>
-
-								{scanResult && (
-									<div
-										className="mb-4 p-3 rounded-lg flex items-center gap-2"
-										style={{
-											backgroundColor: scanResult.success
-												? "rgba(16, 185, 129, 0.1)"
-												: "rgba(239, 68, 68, 0.1)",
-											color: scanResult.success ? "#10b981" : "#ef4444",
-										}}
-									>
-										{scanResult.success ? (
-											<CheckCircle size={18} />
-										) : (
-											<XCircle size={18} />
-										)}
-										<p>{scanResult.message}</p>
-									</div>
-								)}
-
-								<div className="space-y-4">
-									<p style={{ color: "var(--text-muted)" }}>
-										Present RFID card to the reader or tap on the input field and scan
-									</p>
-									<input
-										type="text"
-										ref={rfidInput}
-										value={rfidInput}
-										onChange={(e) => setRfidInput(e.target.value)}
-										onKeyPress={handleRFIDScan}
-										placeholder="Scan RFID card here..."
-										autoFocus
-										className="w-full rounded-lg border px-4 py-3 text-lg font-mono focus:outline-none focus:ring-2"
-										style={{
-											backgroundColor: "var(--page-bg)",
-											borderColor: "var(--border-subtle)",
-											color: "var(--foreground)",
-										}}
-									/>
-									<p className="text-xs" style={{ color: "var(--text-muted)" }}>
-										Press Enter to submit scan
-									</p>
+								<div className="flex items-center justify-between mb-4">
+									<h2 className="text-lg font-semibold flex items-center gap-2" style={{ color: "var(--foreground)" }}>
+										<ShieldCheck size={20} />
+										Quick Attendance Scan
+									</h2>
+									{eventData.with_Geo && (
+										<span
+											className="rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1.5"
+											style={{ backgroundColor: "rgba(16, 185, 129, 0.1)", color: "#10b981" }}
+										>
+											<MapPin size={12} /> Geofencing Active
+										</span>
+									)}
 								</div>
-							</section>
-						)}
 
-						{/* Face Recognition Tab */}
-						{activeTab === "face" && eventData.face_recognition_enabled && (
-							<section
-								className="rounded-lg border p-6"
-								style={{
-									backgroundColor: "var(--surface)",
-									borderColor: "var(--border-subtle)",
-								}}
-							>
-								<h2 className="mb-4 text-lg font-semibold flex items-center gap-2" style={{ color: "var(--foreground)" }}>
-									<Camera size={20} />
-									Face Recognition Scanner
-								</h2>
-								<div className="space-y-4">
-									<button
-										onClick={cameraReady ? stopCamera : startCamera}
-										className="w-full rounded-lg px-4 py-3 font-semibold text-sm transition hover:opacity-90"
-										style={{
-											backgroundColor: cameraReady ? "#ef4444" : "#10b981",
-											color: "white",
-										}}
-									>
-										{cameraReady ? "Stop Camera" : "Start Camera"}
-									</button>
+								<p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+									Face recognition runs automatically. Use RFID as quick fallback.
+								</p>
 
-									{cameraReady && (
-										<video
-											ref={videoRef}
-											autoPlay
-											playsInline
-											className="w-full rounded-lg"
-											style={{ backgroundColor: "#000" }}
-										/>
+								<div className="grid gap-4 md:grid-cols-2">
+									{/* Face Recognition Panel */}
+									{eventData.with_FaceId && (
+										<div
+											className="rounded-xl border p-4"
+											style={{ borderColor: "rgba(59, 130, 246, 0.3)" }}
+										>
+											<div className="flex items-center gap-2 mb-3">
+												<Camera size={18} style={{ color: "#3b82f6" }} />
+												<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+													Face Recognition
+												</h3>
+												<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(59, 130, 246, 0.15)", color: "#3b82f6" }}>
+													PRIMARY
+												</span>
+											</div>
+											<video
+												ref={videoRef}
+												autoPlay
+												playsInline
+												className="w-full rounded-lg mb-3"
+												style={{ backgroundColor: "#000", aspectRatio: "4/3" }}
+											/>
+											<canvas ref={canvasRef} style={{ display: "none" }} />
+											<div className="flex items-center justify-between">
+												<span className="text-xs" style={{ color: cameraReady ? "#10b981" : "var(--text-muted)" }}>
+													{cameraReady ? "Camera active" : "Starting camera..."}
+												</span>
+												<button
+													onClick={cameraReady ? stopCamera : startCamera}
+													className="rounded-full px-4 py-1.5 text-xs font-semibold transition"
+													style={{
+														backgroundColor: cameraReady ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
+														color: cameraReady ? "#ef4444" : "#10b981",
+													}}
+												>
+													{cameraReady ? "Stop Camera" : "Start Camera"}
+												</button>
+											</div>
+										</div>
 									)}
 
-									<canvas ref={canvasRef} style={{ display: "none" }} />
+									{/* RFID Scanner Panel */}
+									{eventData.with_RFID && (
+										<div
+											className="rounded-xl border p-4"
+											style={{ borderColor: "rgba(16, 185, 129, 0.3)" }}
+										>
+											<div className="flex items-center gap-2 mb-3">
+												<CreditCard size={18} style={{ color: "#10b981" }} />
+												<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+													RFID Scanner
+												</h3>
+												<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
+													FALLBACK
+												</span>
+											</div>
+											{scanResult && (
+												<div
+													className="mb-3 p-2.5 rounded-lg flex items-center gap-2 text-xs"
+													style={{
+														backgroundColor: scanResult.success
+															? "rgba(16, 185, 129, 0.1)"
+															: "rgba(239, 68, 68, 0.1)",
+														color: scanResult.success ? "#10b981" : "#ef4444",
+													}}
+												>
+													{scanResult.success ? <CheckCircle size={16} /> : <XCircle size={16} />}
+													<p>{scanResult.message}</p>
+												</div>
+											)}
+										<input
+											type="text"
+											ref={rfidInput}
+											onKeyPress={handleRFIDScan}
+											placeholder="Scan RFID card here or type..."
+											autoFocus={!eventData.with_FaceId}
+											className="w-full rounded-lg border px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 mb-2"
+											style={{
+												backgroundColor: "var(--page-bg)",
+												borderColor: "var(--border-subtle)",
+												color: "var(--foreground)",
+											}}
+										/>
+											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+												Press Enter when scanned
+											</p>
+										</div>
+									)}
 								</div>
+
+								{!eventData.with_FaceId && !eventData.with_RFID && (
+									<div className="text-center py-8">
+										<p style={{ color: "var(--text-muted)" }}>
+											No scanning methods enabled for this event.
+										</p>
+									</div>
+								)}
 							</section>
 						)}
 

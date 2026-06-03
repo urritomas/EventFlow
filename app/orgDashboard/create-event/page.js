@@ -196,6 +196,9 @@ export default function CreateEventPage() {
 				expected_attendance: parseInt(formData.expectedAttendance),
 				is_active: true,
 				is_accepted: false,
+			with_RFID: !!formData.rfidEnabled,
+			with_FaceId: !!formData.faceRecognitionEnabled,
+			with_Geo: !!formData.geofencingEnabled,
 			};
 
 			console.log("Creating event with payload:", eventPayload);

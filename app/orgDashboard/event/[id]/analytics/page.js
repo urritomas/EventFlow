@@ -21,12 +21,13 @@ import {
 	CheckCircle,
 	XCircle,
 	Download,
+	Zap,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
 	const menuItems = [
 		{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
-		{ label: "Create Event", icon: "📝", href: "/orgDashboard/create-event" },
+		{ label: "Create Event", icon: Zap, href: "/orgDashboard/create-event" },
 		{ label: "Active Events", icon: Calendar, href: "#events" },
 		{ label: "Analytics", icon: TrendingUp, href: "#analytics" },
 	];
@@ -174,69 +175,95 @@ export default function EventAnalyticsPage() {
 			try {
 				const supabase = createClient();
 
-				// Fetch event data
-				const { data: event } = await supabase
+				const { data: event, error: eventError } = await supabase
 					.from("events")
 					.select("*")
 					.eq("event_id", eventId)
 					.single();
 
+				if (eventError || !event) {
+					console.error("Event not found:", eventError);
+					setEventData(null);
+					setLoading(false);
+					return;
+				}
+
 				setEventData(event);
 
-				// Fetch attendance data
-				const { data: attendance } = await supabase
-					.from("attendance")
-					.select("*, participants(*)")
-					.eq("event_id", eventId);
+			const { data: attendance, error: attendanceError } = await supabase
+				.from("attendance_logs")
+				.select("*, participants(*)")
+				.eq("event_id", eventId);
 
-				if (attendance) {
-					setAttendanceData(attendance);
-
-					// Calculate stats
-					const totalAttended = attendance.filter((a) => a.verified).length;
-					const lateArrivals = attendance.filter((a) => {
-						if (!a.verified_at || !a.check_in_time) return false;
-						const verifiedTime = new Date(a.verified_at).getTime();
-						const checkInTime = new Date(a.check_in_time).getTime();
-						return verifiedTime - checkInTime > 15 * 60 * 1000; // 15 minutes
-					}).length;
-
-					const verifiedCount = attendance.filter((a) => a.verified).length;
-
-					// Calculate average check-in time
-					let totalCheckInTime = 0;
-					let checkInCount = 0;
-					attendance.forEach((a) => {
-						if (a.verified_at && a.check_in_time) {
-							const verifiedTime = new Date(a.verified_at).getTime();
-							const checkInTime = new Date(a.check_in_time).getTime();
-							const timeDiff = Math.abs(verifiedTime - checkInTime) / (1000 * 60); // minutes
-							totalCheckInTime += timeDiff;
-							checkInCount++;
-						}
-					});
-
-					const avgCheckInTime =
-						checkInCount > 0 ? Math.round((totalCheckInTime / checkInCount) * 10) / 10 : 0;
-
-					setStats({
-						totalRegistered: event?.expected_attendance || 0,
-						totalAttended,
-						attendanceRate:
-							event?.expected_attendance > 0
-								? Math.round((totalAttended / event.expected_attendance) * 100)
-								: 0,
-						lateArrivals,
-						verifiedParticipants: verifiedCount,
-						avgCheckInTime,
-					});
-				}
-			} catch (error) {
-				console.error("Error fetching analytics:", error);
-			} finally {
+			if (attendanceError) {
+				console.error("Attendance fetch error:", attendanceError);
+				setAttendanceData([]);
+				setStats((prev) => ({
+					...prev,
+					totalRegistered: event?.expected_attendance || 0,
+				}));
 				setLoading(false);
+				return;
 			}
-		};
+
+			if (!attendance || attendance.length === 0) {
+				setAttendanceData([]);
+				setStats({
+					totalRegistered: event?.expected_attendance || 0,
+					totalAttended: 0,
+					attendanceRate: 0,
+					lateArrivals: 0,
+					verifiedParticipants: 0,
+					avgCheckInTime: 0,
+				});
+				return;
+			}
+
+			setAttendanceData(attendance);
+
+			// Calculate stats
+			const totalAttended = attendance.filter((a) => a.verified).length;
+			const lateArrivals = attendance.filter((a) => {
+				if (!a.verified_at || !a.check_in_time) return false;
+				const verifiedTime = new Date(a.verified_at).getTime();
+				const checkInTime = new Date(a.check_in_time).getTime();
+				return verifiedTime - checkInTime > 15 * 60 * 1000;
+			}).length;
+
+			const verifiedCount = attendance.filter((a) => a.verified).length;
+
+			let totalCheckInTime = 0;
+			let checkInCount = 0;
+			attendance.forEach((a) => {
+				if (a.verified_at && a.check_in_time) {
+					const verifiedTime = new Date(a.verified_at).getTime();
+					const checkInTime = new Date(a.check_in_time).getTime();
+					const timeDiff = Math.abs(verifiedTime - checkInTime) / (1000 * 60);
+					totalCheckInTime += timeDiff;
+					checkInCount++;
+				}
+			});
+
+			const avgCheckInTime =
+				checkInCount > 0 ? Math.round((totalCheckInTime / checkInCount) * 10) / 10 : 0;
+
+			setStats({
+				totalRegistered: event?.expected_attendance || 0,
+				totalAttended,
+				attendanceRate:
+					event?.expected_attendance > 0
+						? Math.round((totalAttended / event.expected_attendance) * 100)
+						: 0,
+				lateArrivals,
+				verifiedParticipants: verifiedCount,
+				avgCheckInTime,
+			});
+		} catch (error) {
+			console.error("Error fetching analytics:", error);
+		} finally {
+			setLoading(false);
+		}
+	};
 
 		fetchAnalyticsData();
 	}, [isAuthorized, eventId]);
