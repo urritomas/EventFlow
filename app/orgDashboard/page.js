@@ -362,7 +362,7 @@ export default function OrgDashboard() {
 												setSelectedEvent(event);
 												setShowModal(true);
 											}}
-											className="rounded-lg border p-5 text-left transition hover:opacity-80 cursor-pointer ef-animate-fade-in"
+											className="rounded-lg border p-5 text-left transition hover:opacity-80 cursor-pointer ef-animate-fade-in scale-100 hover:scale-[102%]"
 											style={{
 												backgroundColor: "var(--surface)",
 												borderColor: "var(--border-subtle)",

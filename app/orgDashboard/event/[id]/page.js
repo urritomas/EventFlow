@@ -8,6 +8,7 @@ import {
 	Menu,
 	X,
 	LogOut,
+	LogIn,
 	ArrowLeft,
 	Calendar,
 	Clock,
@@ -25,6 +26,7 @@ import {
 	CreditCard,
 	Zap,
 	ShieldCheck,
+	Download,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
@@ -356,17 +358,17 @@ export default function EventDetailsPage() {
 									</div>
 								</div>
 								<div className="flex items-center gap-3">
-									<Clock size={20} style={{ color: "#3b82f6" }} />
-									<div>
-										<p className="text-xs" style={{ color: "var(--text-muted)" }}>
-											Time
-										</p>
-										<p className="font-semibold" style={{ color: "var(--foreground)" }}>
-											{eventData.start_time || "TBA"}
-										</p>
-									</div>
+								<Clock size={20} style={{ color: "#3b82f6" }} />
+								<div>
+									<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+										Time
+									</p>
+									<p className="font-semibold" style={{ color: "var(--foreground)" }}>
+									{eventData.start_time || "TBA"}
+								</p>
 								</div>
-								<div className="flex items-center gap-3">
+							</div>
+							<div className="flex items-center gap-3">
 									<MapPin size={20} style={{ color: "#3b82f6" }} />
 									<div>
 										<p className="text-xs" style={{ color: "var(--text-muted)" }}>
@@ -397,6 +399,7 @@ export default function EventDetailsPage() {
 							{ id: "overview", label: "Overview", icon: Calendar },
 							{ id: "unified-scanner", label: "Quick Scan", icon: Zap },
 							{ id: "attendance", label: "Attendees", icon: Users },
+							{ id: "analytics", label: "Analytics", icon: TrendingUp },
 						].map((tab) => (
 							<button
 								key={tab.id}
@@ -454,83 +457,140 @@ export default function EventDetailsPage() {
 											{eventData.full_address || "Address not provided"}
 										</p>
 									</div>
-									<div className="grid gap-4 md:grid-cols-3">
-								<div>
-									<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
-										RFID Enabled
-									</h3>
-									<span
-										className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
-										style={{
-											backgroundColor: eventData.with_RFID
-												? "rgba(16, 185, 129, 0.1)"
-												: "rgba(107, 114, 128, 0.1)",
-											color: eventData.with_RFID ? "#10b981" : "#6b7280",
-										}}
-									>
-										{eventData.with_RFID ? <Check size={14} /> : <X size={14} />}
-										{eventData.with_RFID ? "Yes" : "No"}
-									</span>
-								</div>
-								<div>
-									<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
-										Geofencing
-									</h3>
-									<span
-										className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
-										style={{
-											backgroundColor: eventData.with_Geo
-												? "rgba(16, 185, 129, 0.1)"
-												: "rgba(107, 114, 128, 0.1)",
-											color: eventData.with_Geo ? "#10b981" : "#6b7280",
-										}}
-									>
-										{eventData.with_Geo ? <Check size={14} /> : <X size={14} />}
-										{eventData.with_Geo ? "Yes" : "No"}
-									</span>
-								</div>
-								<div>
-									<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
-										Face Recognition
-									</h3>
-									<span
-										className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
-										style={{
-											backgroundColor: eventData.with_FaceId
-												? "rgba(16, 185, 129, 0.1)"
-												: "rgba(107, 114, 128, 0.1)",
-											color: eventData.with_FaceId ? "#10b981" : "#6b7280",
-										}}
-									>
-										{eventData.with_FaceId ? <Check size={14} /> : <X size={14} />}
-										{eventData.with_FaceId ? "Yes" : "No"}
-									</span>
-								</div>
+										<div className="grid gap-4 md:grid-cols-3">
+										<div>
+											<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
+												RFID Enabled
+											</h3>
+											<span
+												className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
+												style={{
+													backgroundColor: eventData.with_RFID
+														? "rgba(16, 185, 129, 0.1)"
+														: "rgba(107, 114, 128, 0.1)",
+													color: eventData.with_RFID ? "#10b981" : "#6b7280",
+												}}
+											>
+												{eventData.with_RFID ? <Check size={14} /> : <X size={14} />}
+												{eventData.with_RFID ? "Yes" : "No"}
+											</span>
+										</div>
+										<div>
+											<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
+												Geofencing
+											</h3>
+											<span
+												className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
+												style={{
+													backgroundColor: eventData.with_Geo
+														? "rgba(16, 185, 129, 0.1)"
+														: "rgba(107, 114, 128, 0.1)",
+													color: eventData.with_Geo ? "#10b981" : "#6b7280",
+												}}
+											>
+												{eventData.with_Geo ? <Check size={14} /> : <X size={14} />}
+												{eventData.with_Geo ? "Yes" : "No"}
+											</span>
+										</div>
+										<div>
+											<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
+												Face Recognition
+											</h3>
+											<span
+												className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
+												style={{
+													backgroundColor: eventData.with_FaceId
+														? "rgba(16, 185, 129, 0.1)"
+														: "rgba(107, 114, 128, 0.1)",
+													color: eventData.with_FaceId ? "#10b981" : "#6b7280",
+												}}
+											>
+												{eventData.with_FaceId ? <Check size={14} /> : <X size={14} />}
+												{eventData.with_FaceId ? "Yes" : "No"}
+											</span>
+										</div>
 										<div>
 											<h3 className="text-sm font-semibold mb-2" style={{ color: "var(--text-muted)" }}>
 												Status
 											</h3>
 											<span
-												className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm"
+												className="rounded-full px-3 py-1 text-sm font-semibold"
 												style={{
-													backgroundColor:
-														eventData.is_accepted === true
-															? "rgba(16, 185, 129, 0.1)"
-															: "rgba(234, 179, 8, 0.1)",
-													color:
-														eventData.is_accepted === true ? "#10b981" : "#eab308",
+													backgroundColor: eventData.is_accepted
+														? "rgba(16, 185, 129, 0.1)"
+														: eventData.is_active
+														? "rgba(59, 130, 246, 0.15)"
+														: "rgba(107, 114, 128, 0.15)",
+													color: eventData.is_accepted
+														? "#10b981"
+														: eventData.is_active
+														? "#3b82f6"
+														: "#6b7280",
 												}}
 											>
-												{eventData.is_accepted === true ? (
-													<CheckCircle size={14} />
-												) : (
-													<AlertCircle size={14} />
-												)}
-												{eventData.is_accepted === true
-													? "Approved"
-													: "Pending Approval"}
+												{eventData.is_accepted ? "Approved" : eventData.is_active ? "Active" : "Pending"}
 											</span>
 										</div>
+									</div>
+
+									{/* Quick Actions */}
+									<div className="grid gap-4 md:grid-cols-3">
+										<button
+											onClick={() => router.push(`/orgDashboard/event/${eventId}`)}
+											className="rounded-xl border p-4 text-left transition hover:-translate-y-1 hover:border-blue-200"
+											style={{
+												backgroundColor: "var(--surface)",
+												borderColor: "var(--border-subtle)",
+											}}
+										>
+											<div className="flex items-center gap-2 mb-2">
+												<LogIn size={18} style={{ color: "#10b981" }} />
+												<h3 className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+													Check In / Out
+												</h3>
+											</div>
+											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+												Manage attendance via scanner or manual entry
+											</p>
+										</button>
+
+										<button
+											onClick={() => router.push(`/orgDashboard/attendance-scanner`)}
+											className="rounded-xl border p-4 text-left transition hover:-translate-y-1 hover:border-blue-200"
+											style={{
+												backgroundColor: "var(--surface)",
+												borderColor: "var(--border-subtle)",
+											}}
+										>
+											<div className="flex items-center gap-2 mb-2">
+												<Camera size={18} style={{ color: "#3b82f6" }} />
+												<h3 className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+													Live Scanner
+												</h3>
+											</div>
+											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+												Use face recognize and RFID in one scan view
+											</p>
+										</button>
+
+										<button
+											onClick={() => setActiveTab("analytics")}
+											className="rounded-xl border p-4 text-left transition hover:-translate-y-1 hover:border-blue-200"
+											style={{
+												backgroundColor: "var(--surface)",
+												borderColor: "var(--border-subtle)",
+											}}
+										>
+											<div className="flex items-center gap-2 mb-2">
+												<TrendingUp size={18} style={{ color: "#f59e0b" }} />
+												<h3 className="font-semibold text-sm" style={{ color: "var(--foreground)" }}>
+													Analytics
+												</h3>
+											</div>
+											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+												View attendance performance
+											</p>
+										</button>
 									</div>
 								</div>
 							</section>
@@ -726,18 +786,95 @@ export default function EventDetailsPage() {
 																color: attendee.verified ? "#10b981" : "#ef4444",
 															}}
 														>
-															{attendee.verified ? (
-																<Check size={12} />
-															) : (
-																<X size={12} />
-															)}
+															{attendee.verified ? <Check size={12} /> : <X size={12} />}
 															{attendee.verified ? "Verified" : "Pending"}
 														</span>
 													</td>
 												</tr>
 											))}
+											{attendees.length === 0 && (
+												<tr>
+													<td
+														className="px-6 py-6 text-center text-sm"
+														style={{ color: "var(--text-muted)" }}
+														colSpan={4}
+													>
+														No attendees recorded yet.
+													</td>
+												</tr>
+											)}
 										</tbody>
 									</table>
+								</div>
+							</section>
+						)}
+
+						{/* Analytics Tab */}
+						{activeTab === "analytics" && (
+							<section
+								className="rounded-lg border p-6"
+								style={{
+									backgroundColor: "var(--surface)",
+									borderColor: "var(--border-subtle)",
+								}}
+							>
+								<div className="flex items-center justify-between mb-4">
+									<h2 className="text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+										Attendance Analytics
+									</h2>
+									<button
+										onClick={() => {
+											const headers = ["Name", "Email", "Check-in Time", "Verified", "Status"];
+											const rows = attendees.map((a) => [
+												a.participants?.name || "Unknown",
+												a.participants?.email || "N/A",
+												a.check_in_time ? new Date(a.check_in_time).toLocaleTimeString() : "-",
+												a.verified ? "Yes" : "No",
+												a.verified ? "Verified" : "Pending",
+											]);
+											const csvContent = [headers.join(","), ...rows.map((row) => row.map((cell) => `"${cell}"`).join(","))].join("\n");
+											const blob = new Blob([csvContent], { type: "text/csv" });
+											const url = window.URL.createObjectURL(blob);
+											const link = document.createElement("a");
+											link.href = url;
+											link.download = `${eventData?.event_name || "event"}_attendance_${Date.now()}.csv`;
+											link.click();
+											window.URL.revokeObjectURL(url);
+										}}
+										className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+										style={{ backgroundColor: "#3b82f6" }}
+									>
+										<Download size={16} />
+										Download CSV
+									</button>
+								</div>
+
+								<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+									<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Total Checked</p>
+										<p className="mt-2 text-2xl font-bold" style={{ color: "var(--foreground)" }}>{attendees.length}</p>
+									</div>
+									<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Verified</p>
+										<p className="mt-2 text-2xl font-bold" style={{ color: "#10b981" }}>
+											{attendees.filter((a) => a.verified).length}
+										</p>
+									</div>
+									<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Pending</p>
+										<p className="mt-2 text-2xl font-bold" style={{ color: "#f97316" }}>
+											{attendees.filter((a) => !a.verified).length}
+										</p>
+									</div>
+									<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Attendance Rate</p>
+										<p className="mt-2 text-2xl font-bold" style={{ color: "#3b82f6" }}>
+											{eventData?.expected_attendance
+												? Math.round((attendees.length / eventData.expected_attendance) * 100)
+												: 0}
+											%
+										</p>
+									</div>
 								</div>
 							</section>
 						)}

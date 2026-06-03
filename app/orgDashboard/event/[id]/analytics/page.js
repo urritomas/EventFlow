@@ -305,291 +305,291 @@ export default function EventAnalyticsPage() {
 	if (!eventData) return <div>Event not found</div>;
 
 	return (
-		<div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>
-			<SiteHeader showBack={true} />
-			<div className="flex">
-				<Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout} />
+      <div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>
+        <SiteHeader showBack={true} />
+        <div className="flex">
+          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout} />
 
-				<main className="flex-1 overflow-y-auto h-screen">
-					<div
-						className="sticky top-0 z-20 border-b px-6 py-3 flex items-center justify-between"
-						style={{
-							backgroundColor: "var(--surface)",
-							borderColor: "var(--border-subtle)",
-						}}
-					>
-						<div className="flex items-center gap-4">
-							<button
-								onClick={() => router.back()}
-								className="p-2 hover:opacity-70 transition"
-								style={{ color: "var(--foreground)" }}
-							>
-								<ArrowLeft size={20} />
-							</button>
-							<div>
-								<h1 className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>
-									{eventData.event_name}
-								</h1>
-								<p className="text-xs" style={{ color: "var(--text-muted)" }}>
-									Analytics & Performance
-								</p>
-							</div>
-						</div>
-						<button
-							onClick={() => setSidebarOpen(!sidebarOpen)}
-							className="rounded-lg p-2 transition hover:opacity-80 md:hidden"
-							style={{ backgroundColor: "var(--surface-soft)" }}
-						>
-							<Menu size={20} style={{ color: "var(--foreground)" }} />
-						</button>
-					</div>
+          <main className="flex-1 overflow-y-auto h-screen">
+            <div
+              className="sticky top-0 z-20 border-b px-6 py-3 flex items-center justify-between"
+              style={{
+                backgroundColor: "var(--surface)",
+                borderColor: "var(--border-subtle)",
+              }}
+            >
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => router.back()}
+                  className="p-2 hover:opacity-70 transition hover:scale-105 active:scale-95"
+                  style={{ color: "var(--foreground)" }}
+                >
+                  <ArrowLeft size={20} />
+                </button>
+                <div>
+                  <h1 className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>
+                    {eventData.event_name}
+                  </h1>
+                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                    Analytics & Performance
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="rounded-lg p-2 transition hover:opacity-80 md:hidden"
+                style={{ backgroundColor: "var(--surface-soft)" }}
+              >
+                <Menu size={20} style={{ color: "var(--foreground)" }} />
+              </button>
+            </div>
 
-					<div className="space-y-6 overflow-y-auto p-6 md:p-8">
-						{/* Key Metrics */}
-						<section>
-							<h2 className="mb-4 text-lg font-bold" style={{ color: "var(--foreground)" }}>
-								Key Metrics
-							</h2>
-							<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-								<StatCard
-									title="Total Attendance"
-									value={`${stats.totalAttended} / ${stats.totalRegistered}`}
-									icon={Users}
-									color="#10b981"
-								/>
-								<StatCard
-									title="Attendance Rate"
-									value={`${stats.attendanceRate}%`}
-									icon={TrendingUp}
-									color="#3b82f6"
-									trend={{
-										positive: stats.attendanceRate >= 75,
-										text:
-											stats.attendanceRate >= 75
-												? "Above target"
-												: "Below target",
-									}}
-								/>
-								<StatCard
-									title="Verified Participants"
-									value={stats.verifiedParticipants}
-									icon={CheckCircle}
-									color="#10b981"
-								/>
-								<StatCard
-									title="Late Arrivals"
-									value={stats.lateArrivals}
-									icon={Clock}
-									color="#f97316"
-									trend={{
-										positive: stats.lateArrivals === 0,
-										text:
-											stats.lateArrivals === 0
-												? "No late arrivals"
-												: `${stats.lateArrivals} late`,
-									}}
-								/>
-								<StatCard
-									title="Avg Check-in Time"
-									value={`${stats.avgCheckInTime} min`}
-									icon={AlertCircle}
-									color="#eab308"
-								/>
-							</div>
-						</section>
+            <div className="space-y-6 overflow-y-auto p-6 md:p-8">
+              {/* Key Metrics */}
+              <section className="animate-[fadeIn_0.3s_ease-out]">
+                <h2 className="mb-4 text-lg font-bold" style={{ color: "var(--foreground)" }}>
+                  Key Metrics
+                </h2>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <StatCard
+                    title="Total Attendance"
+                    value={`${stats.totalAttended} / ${stats.totalRegistered}`}
+                    icon={Users}
+                    color="#10b981"
+                  />
+                  <StatCard
+                    title="Attendance Rate"
+                    value={`${stats.attendanceRate}%`}
+                    icon={TrendingUp}
+                    color="#3b82f6"
+                    trend={{
+                      positive: stats.attendanceRate >= 75,
+                      text:
+                        stats.attendanceRate >= 75
+                          ? "Above target"
+                          : "Below target",
+                    }}
+                  />
+                  <StatCard
+                    title="Verified Participants"
+                    value={stats.verifiedParticipants}
+                    icon={CheckCircle}
+                    color="#10b981"
+                  />
+                  <StatCard
+                    title="Late Arrivals"
+                    value={stats.lateArrivals}
+                    icon={Clock}
+                    color="#f97316"
+                    trend={{
+                      positive: stats.lateArrivals === 0,
+                      text:
+                        stats.lateArrivals === 0
+                          ? "No late arrivals"
+                          : `${stats.lateArrivals} late`,
+                    }}
+                  />
+                  <StatCard
+                    title="Avg Check-in Time"
+                    value={`${stats.avgCheckInTime} min`}
+                    icon={AlertCircle}
+                    color="#eab308"
+                  />
+                </div>
+              </section>
 
-						{/* Attendance Performance */}
-						<section
-							className="rounded-lg border p-6"
-							style={{
-								backgroundColor: "var(--surface)",
-								borderColor: "var(--border-subtle)",
-							}}
-						>
-							<h2 className="mb-4 text-lg font-bold" style={{ color: "var(--foreground)" }}>
-								Attendance Performance
-							</h2>
-							<div className="space-y-4">
-								<div>
-									<div className="flex justify-between mb-2">
-										<span style={{ color: "var(--text-muted)" }}>On-Time Arrivals</span>
-										<span style={{ color: "#10b981", fontWeight: "bold" }}>
-											{stats.totalAttended - stats.lateArrivals} ({Math.round(((stats.totalAttended - stats.lateArrivals) / stats.totalAttended) * 100) || 0}%)
-										</span>
-									</div>
-									<div
-										className="h-3 rounded-full overflow-hidden"
-										style={{ backgroundColor: "rgba(16, 185, 129, 0.1)" }}
-									>
-										<div
-											className="h-full transition-all"
-											style={{
-												backgroundColor: "#10b981",
-												width: `${stats.totalAttended > 0 ? Math.round(((stats.totalAttended - stats.lateArrivals) / stats.totalAttended) * 100) : 0}%`,
-											}}
-										/>
-									</div>
-								</div>
+              {/* Attendance Performance */}
+              <section
+                className="rounded-lg border p-6 animate-[fadeIn_0.5s_ease-out]"
+                style={{
+                  backgroundColor: "var(--surface)",
+                  borderColor: "var(--border-subtle)",
+                }}
+              >
+                <h2 className="mb-4 text-lg font-bold" style={{ color: "var(--foreground)" }}>
+                  Attendance Performance
+                </h2>
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between mb-2">
+                      <span style={{ color: "var(--text-muted)" }}>On-Time Arrivals</span>
+                      <span style={{ color: "#10b981", fontWeight: "bold" }}>
+                        {stats.totalAttended - stats.lateArrivals} ({Math.round(((stats.totalAttended - stats.lateArrivals) / stats.totalAttended) * 100) || 0}%)
+                      </span>
+                    </div>
+                    <div
+                      className="h-3 rounded-full overflow-hidden"
+                      style={{ backgroundColor: "rgba(16, 185, 129, 0.1)" }}
+                    >
+                      <div
+                        className="h-full transition-all"
+                        style={{
+                          backgroundColor: "#10b981",
+                          width: `${stats.totalAttended > 0 ? Math.round(((stats.totalAttended - stats.lateArrivals) / stats.totalAttended) * 100) : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
 
-								<div>
-									<div className="flex justify-between mb-2">
-										<span style={{ color: "var(--text-muted)" }}>Late Arrivals</span>
-										<span style={{ color: "#f97316", fontWeight: "bold" }}>
-											{stats.lateArrivals} ({Math.round((stats.lateArrivals / stats.totalAttended) * 100) || 0}%)
-										</span>
-									</div>
-									<div
-										className="h-3 rounded-full overflow-hidden"
-										style={{ backgroundColor: "rgba(249, 115, 22, 0.1)" }}
-									>
-										<div
-											className="h-full transition-all"
-											style={{
-												backgroundColor: "#f97316",
-												width: `${stats.totalAttended > 0 ? Math.round((stats.lateArrivals / stats.totalAttended) * 100) : 0}%`,
-											}}
-										/>
-									</div>
-								</div>
+                  <div>
+                    <div className="flex justify-between mb-2">
+                      <span style={{ color: "var(--text-muted)" }}>Late Arrivals</span>
+                      <span style={{ color: "#f97316", fontWeight: "bold" }}>
+                        {stats.lateArrivals} ({Math.round((stats.lateArrivals / stats.totalAttended) * 100) || 0}%)
+                      </span>
+                    </div>
+                    <div
+                      className="h-3 rounded-full overflow-hidden"
+                      style={{ backgroundColor: "rgba(249, 115, 22, 0.1)" }}
+                    >
+                      <div
+                        className="h-full transition-all"
+                        style={{
+                          backgroundColor: "#f97316",
+                          width: `${stats.totalAttended > 0 ? Math.round((stats.lateArrivals / stats.totalAttended) * 100) : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
 
-								<div>
-									<div className="flex justify-between mb-2">
-										<span style={{ color: "var(--text-muted)" }}>No Show</span>
-										<span style={{ color: "#ef4444", fontWeight: "bold" }}>
-											{stats.totalRegistered - stats.totalAttended} ({Math.round(((stats.totalRegistered - stats.totalAttended) / stats.totalRegistered) * 100) || 0}%)
-										</span>
-									</div>
-									<div
-										className="h-3 rounded-full overflow-hidden"
-										style={{ backgroundColor: "rgba(239, 68, 68, 0.1)" }}
-									>
-										<div
-											className="h-full transition-all"
-											style={{
-												backgroundColor: "#ef4444",
-												width: `${Math.round(((stats.totalRegistered - stats.totalAttended) / stats.totalRegistered) * 100) || 0}%`,
-											}}
-										/>
-									</div>
-								</div>
-							</div>
-						</section>
+                  <div>
+                    <div className="flex justify-between mb-2">
+                      <span style={{ color: "var(--text-muted)" }}>No Show</span>
+                      <span style={{ color: "#ef4444", fontWeight: "bold" }}>
+                        {stats.totalRegistered - stats.totalAttended} ({Math.round(((stats.totalRegistered - stats.totalAttended) / stats.totalRegistered) * 100) || 0}%)
+                      </span>
+                    </div>
+                    <div
+                      className="h-3 rounded-full overflow-hidden"
+                      style={{ backgroundColor: "rgba(239, 68, 68, 0.1)" }}
+                    >
+                      <div
+                        className="h-full transition-all"
+                        style={{
+                          backgroundColor: "#ef4444",
+                          width: `${Math.round(((stats.totalRegistered - stats.totalAttended) / stats.totalRegistered) * 100) || 0}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
 
-						{/* Detailed Attendance List */}
-						<section
-							className="rounded-lg border overflow-hidden"
-							style={{
-								backgroundColor: "var(--surface)",
-								borderColor: "var(--border-subtle)",
-							}}
-						>
-							<div className="flex items-center justify-between p-6 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-								<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
-									Detailed Attendance
-								</h2>
-								<button
-									onClick={handleExportData}
-									className="flex items-center gap-2 rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
-									style={{
-										backgroundColor: "#3b82f6",
-										color: "white",
-									}}
-								>
-									<Download size={16} />
-									Export CSV
-								</button>
-							</div>
+              {/* Detailed Attendance List */}
+              <section
+                className="rounded-lg border overflow-hidden animate-[fadeIn_0.7s_ease-out]"
+                style={{
+                  backgroundColor: "var(--surface)",
+                  borderColor: "var(--border-subtle)",
+                }}
+              >
+                <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+                  <h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
+                    Detailed Attendance
+                  </h2>
+                  <button
+                    onClick={handleExportData}
+                    className="flex items-center gap-2 rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90 hover:scale-105 active:scale-95"
+                    style={{
+                      backgroundColor: "#3b82f6",
+                      color: "white",
+                    }}
+                  >
+                    <Download size={16} />
+                    Export CSV
+                  </button>
+                </div>
 
-							<div className="overflow-x-auto">
-								<table className="w-full text-sm">
-									<thead>
-										<tr style={{ backgroundColor: "var(--surface-soft)", borderColor: "var(--border-subtle)" }} className="border-b">
-											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Participant
-											</th>
-											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Email
-											</th>
-											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Check-in Time
-											</th>
-											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Status
-											</th>
-											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Duration
-											</th>
-										</tr>
-									</thead>
-									<tbody>
-										{attendanceData.map((attendee, idx) => {
-											const checkInTime = attendee.check_in_time
-												? new Date(attendee.check_in_time)
-												: null;
-											const verifiedTime = attendee.verified_at
-												? new Date(attendee.verified_at)
-												: null;
-											const duration = checkInTime && verifiedTime
-												? Math.round((verifiedTime.getTime() - checkInTime.getTime()) / (1000 * 60))
-												: 0;
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ backgroundColor: "var(--surface-soft)", borderColor: "var(--border-subtle)" }} className="border-b">
+                        <th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+                          Participant
+                        </th>
+                        <th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+                          Email
+                        </th>
+                        <th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+                          Check-in Time
+                        </th>
+                        <th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+                          Status
+                        </th>
+                        <th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+                          Duration
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {attendanceData.map((attendee, idx) => {
+                        const checkInTime = attendee.check_in_time
+                          ? new Date(attendee.check_in_time)
+                          : null;
+                        const verifiedTime = attendee.verified_at
+                          ? new Date(attendee.verified_at)
+                          : null;
+                        const duration = checkInTime && verifiedTime
+                          ? Math.round((verifiedTime.getTime() - checkInTime.getTime()) / (1000 * 60))
+                          : 0;
 
-											return (
-												<tr
-													key={idx}
-													style={{
-														backgroundColor: "var(--surface)",
-														borderColor: "var(--border-subtle)",
-													}}
-													className={idx !== attendanceData.length - 1 ? "border-b" : ""}
-												>
-													<td className="px-6 py-4 font-medium" style={{ color: "var(--foreground)" }}>
-														{attendee.participants?.name || "Unknown"}
-													</td>
-													<td className="px-6 py-4" style={{ color: "var(--text-muted)" }}>
-														{attendee.participants?.email || "N/A"}
-													</td>
-													<td className="px-6 py-4" style={{ color: "var(--text-muted)" }}>
-														{checkInTime ? checkInTime.toLocaleTimeString() : "-"}
-													</td>
-													<td className="px-6 py-4">
-														<span
-															className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs"
-															style={{
-																backgroundColor: attendee.verified
-																	? "rgba(16, 185, 129, 0.1)"
-																	: "rgba(239, 68, 68, 0.1)",
-																color: attendee.verified ? "#10b981" : "#ef4444",
-															}}
-														>
-															{attendee.verified ? (
-																<Check size={12} />
-															) : (
-																<X size={12} />
-															)}
-															{attendee.verified ? "Verified" : "Pending"}
-														</span>
-													</td>
-													<td className="px-6 py-4" style={{ color: "var(--text-muted)" }}>
-														{duration > 15 ? (
-															<span style={{ color: "#f97316" }}>
-																{duration} min (Late)
-															</span>
-														) : (
-															<span style={{ color: "#10b981" }}>
-																{duration} min
-															</span>
-														)}
-													</td>
-												</tr>
-											);
-										})}
-									</tbody>
-								</table>
-							</div>
-						</section>
-					</div>
-				</main>
-			</div>
-		</div>
+                        return (
+                          <tr
+                            key={idx}
+                            style={{
+                              backgroundColor: "var(--surface)",
+                              borderColor: "var(--border-subtle)",
+                            }}
+                            className={idx !== attendanceData.length - 1 ? "border-b" : ""}
+                          >
+                            <td className="px-6 py-4 font-medium" style={{ color: "var(--foreground)" }}>
+                              {attendee.participants?.name || "Unknown"}
+                            </td>
+                            <td className="px-6 py-4" style={{ color: "var(--text-muted)" }}>
+                              {attendee.participants?.email || "N/A"}
+                            </td>
+                            <td className="px-6 py-4" style={{ color: "var(--text-muted)" }}>
+                              {checkInTime ? checkInTime.toLocaleTimeString() : "-"}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span
+                                className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs"
+                                style={{
+                                  backgroundColor: attendee.verified
+                                    ? "rgba(16, 185, 129, 0.1)"
+                                    : "rgba(239, 68, 68, 0.1)",
+                                  color: attendee.verified ? "#10b981" : "#ef4444",
+                                }}
+                              >
+                                {attendee.verified ? (
+                                  <Check size={12} />
+                                ) : (
+                                  <X size={12} />
+                                )}
+                                {attendee.verified ? "Verified" : "Pending"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4" style={{ color: "var(--text-muted)" }}>
+                              {duration > 15 ? (
+                                <span style={{ color: "#f97316" }}>
+                                  {duration} min (Late)
+                                </span>
+                              ) : (
+                                <span style={{ color: "#10b981" }}>
+                                  {duration} min
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
 	);
 }

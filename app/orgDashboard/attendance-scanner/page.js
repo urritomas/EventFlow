@@ -220,16 +220,16 @@ export default function AttendanceScannerPage() {
   if (!isAuthorized) return null;
 
   return (
-    <div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>
+      <div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>
 
       {/* Top bar */}
-      <div
-        className="sticky top-0 z-20 border-b px-6 py-3 flex items-center gap-4"
-        style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}
-      >
+          <div
+            className="rounded-2xl border px-6 py-4 transition hover:border-amber-300/50 ef-animate-fade-in ef-animate-delay-3"
+            style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}
+          >
         <button
           onClick={() => router.push("/orgDashboard")}
-          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-semibold text-slate-100 transition hover:bg-white/10"
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-semibold text-slate-100 transition hover:bg-white/10 hover:scale-105 active:scale-95"
         >
           <ArrowLeft size={14} /> Back
         </button>
@@ -256,12 +256,12 @@ export default function AttendanceScannerPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl p-6 md:p-8">
+      <div className="mx-auto max-w-5xl p-6 md:p-8 ef-animate-fade-in ef-animate-delay-1">
 
         {/* Active event banner */}
         {activeEvent && (
           <div
-            className="mb-6 rounded-xl border px-5 py-3 flex items-center gap-3"
+            className="mb-6 rounded-xl border px-5 py-3 flex items-center gap-3 ef-animate-fade-in"
             style={{ backgroundColor: "rgba(59,130,246,0.08)", borderColor: "rgba(59,130,246,0.25)" }}
           >
             <Clock size={16} style={{ color: "#3b82f6" }} />
@@ -287,7 +287,7 @@ export default function AttendanceScannerPage() {
         {/* Attendance Summary Card */}
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
           <div
-            className="rounded-2xl border px-6 py-4"
+            className="rounded-2xl border px-6 py-4 transition hover:border-blue-300/50 ef-animate-fade-in ef-animate-delay-1"
             style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}
           >
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Scans</p>
@@ -409,7 +409,7 @@ export default function AttendanceScannerPage() {
             <button
               onClick={() => setScanning((s) => !s)}
               disabled={!cameraReady || !apiOnline}
-              className={`w-full rounded-2xl py-3.5 text-sm font-bold tracking-wide transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40 ${
+              className={`w-full rounded-2xl py-3.5 text-sm font-bold tracking-wide transition hover:brightness-110 hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 ${
                 scanning
                   ? "border border-red-500/30 bg-red-500/10 text-red-300"
                   : "bg-blue-500 text-white"
@@ -431,14 +431,14 @@ export default function AttendanceScannerPage() {
                 ]);
                 setTotalScans((n) => n + 1);
               }}
-              className="w-full rounded-2xl py-2 text-xs font-semibold border border-slate-500/30 bg-slate-500/10 text-slate-400 transition hover:bg-slate-500/20"
+              className="w-full rounded-2xl py-2 text-xs font-semibold border border-slate-500/30 bg-slate-500/10 text-slate-400 transition hover:bg-slate-500/20 hover:scale-[1.01] active:scale-95"
             >
               + Add Test Entry
             </button>
           </div>
 
           {/* Session log */}
-          <div className="flex-1 rounded-2xl border" style={{ borderColor: "var(--border-subtle)", backgroundColor: "var(--surface)" }}>
+          <div className="flex-1 rounded-2xl border ef-animate-fade-in ef-animate-delay-2" style={{ borderColor: "var(--border-subtle)", backgroundColor: "var(--surface)" }}>
             <div
               className="flex items-center justify-between border-b px-5 py-4"
               style={{ borderColor: "var(--border-subtle)" }}
@@ -470,7 +470,7 @@ export default function AttendanceScannerPage() {
               ) : (
                 <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
                   {logEntries.map((p, i) => (
-                    <li key={i} className="flex items-center gap-3 px-5 py-4 hover:bg-white/5 transition">
+                    <li key={i} className="flex items-center gap-3 px-5 py-4 hover:bg-white/5 transition animate-[fadeIn_0.3s_ease-out]">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold text-white" style={{ backgroundColor: "rgba(16, 185, 129, 0.3)", color: "#10b981" }}>
                         {p.name.charAt(0).toUpperCase()}
                       </div>

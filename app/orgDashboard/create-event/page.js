@@ -250,389 +250,389 @@ export default function CreateEventPage() {
 	if (!isAuthorized) return null;
 
 	return (
-		<div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>
-			<SiteHeader showBack={true} />
-			<div className="flex">
-				<Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout} />
+      <div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>
+        <SiteHeader showBack={true} />
+        <div className="flex">
+          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout} />
 
-				<main className="flex-1 overflow-y-auto h-screen">
-					<div
-						className="sticky top-0 z-20 border-b px-6 py-3 flex items-center justify-between"
-						style={{
-							backgroundColor: "var(--surface)",
-							borderColor: "var(--border-subtle)",
-						}}
-					>
-						<h1 className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>
-							Create New Event
-						</h1>
-						<button
-							onClick={() => setSidebarOpen(!sidebarOpen)}
-							className="rounded-lg p-2 transition hover:opacity-80 md:hidden"
-							style={{ backgroundColor: "var(--surface-soft)" }}
-						>
-							<Menu size={20} style={{ color: "var(--foreground)" }} />
-						</button>
-					</div>
+          <main className="flex-1 overflow-y-auto h-screen">
+            <div
+              className="sticky top-0 z-20 border-b px-6 py-3 flex items-center justify-between"
+              style={{
+                backgroundColor: "var(--surface)",
+                borderColor: "var(--border-subtle)",
+              }}
+            >
+              <h1 className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>
+                Create New Event
+              </h1>
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="rounded-lg p-2 transition hover:opacity-80 md:hidden"
+                style={{ backgroundColor: "var(--surface-soft)" }}
+              >
+                <Menu size={20} style={{ color: "var(--foreground)" }} />
+              </button>
+            </div>
 
-					<div className="space-y-6 overflow-y-auto p-6 md:p-8">
-						{/* Messages */}
-						{successMessage && (
-							<div
-								className="rounded-lg p-4 flex items-center gap-3"
-								style={{
-									backgroundColor: "rgba(16, 185, 129, 0.1)",
-									borderLeft: "4px solid #10b981",
-								}}
-							>
-								<CheckCircle size={20} style={{ color: "#10b981" }} />
-								<p style={{ color: "#10b981" }}>{successMessage}</p>
-							</div>
-						)}
+            <div className="space-y-6 overflow-y-auto p-6 md:p-8">
+              {/* Messages */}
+              {successMessage && (
+                <div
+                  className="rounded-lg p-4 flex items-center gap-3 animate-[fadeIn_0.3s_ease-out]"
+                  style={{
+                    backgroundColor: "rgba(16, 185, 129, 0.1)",
+                    borderLeft: "4px solid #10b981",
+                  }}
+                >
+                  <CheckCircle size={20} style={{ color: "#10b981" }} />
+                  <p style={{ color: "#10b981" }}>{successMessage}</p>
+                </div>
+              )}
 
-						{errorMessage && (
-							<div
-								className="rounded-lg p-4 flex items-center gap-3"
-								style={{
-									backgroundColor: "rgba(239, 68, 68, 0.1)",
-									borderLeft: "4px solid #ef4444",
-								}}
-							>
-								<AlertCircle size={20} style={{ color: "#ef4444" }} />
-								<p style={{ color: "#ef4444" }}>{errorMessage}</p>
-							</div>
-						)}
+              {errorMessage && (
+                <div
+                  className="rounded-lg p-4 flex items-center gap-3 animate-[fadeIn_0.3s_ease-out]"
+                  style={{
+                    backgroundColor: "rgba(239, 68, 68, 0.1)",
+                    borderLeft: "4px solid #ef4444",
+                  }}
+                >
+                  <AlertCircle size={20} style={{ color: "#ef4444" }} />
+                  <p style={{ color: "#ef4444" }}>{errorMessage}</p>
+                </div>
+              )}
 
-						{/* Event Creation Form */}
-						<form onSubmit={handleSubmit} className="space-y-6">
-							{/* Basic Information */}
-							<section
-								className="rounded-lg border p-6"
-								style={{
-									backgroundColor: "var(--surface)",
-									borderColor: "var(--border-subtle)",
-								}}
-							>
-								<h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
-									Basic Information
-								</h2>
+              {/* Event Creation Form */}
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Basic Information */}
+                <section
+                  className="rounded-lg border p-6 animate-[fadeIn_0.4s_ease-out]"
+                  style={{
+                    backgroundColor: "var(--surface)",
+                    borderColor: "var(--border-subtle)",
+                  }}
+                >
+                  <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+                    Basic Information
+                  </h2>
 
-								<div className="space-y-4">
-									<div>
-										<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-											Event Name *
-										</label>
-										<input
-											type="text"
-											name="eventName"
-											value={formData.eventName}
-											onChange={handleInputChange}
-											placeholder="Enter event name"
-											className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
-											style={{
-												backgroundColor: "var(--page-bg)",
-												borderColor: "var(--border-subtle)",
-												color: "var(--foreground)",
-												"--tw-ring-color": "#3b82f6",
-											}}
-										/>
-									</div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                        Event Name *
+                      </label>
+                      <input
+                        type="text"
+                        name="eventName"
+                        value={formData.eventName}
+                        onChange={handleInputChange}
+                        placeholder="Enter event name"
+                        className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                        style={{
+                          backgroundColor: "var(--page-bg)",
+                          borderColor: "var(--border-subtle)",
+                          color: "var(--foreground)",
+                          "--tw-ring-color": "#3b82f6",
+                        }}
+                      />
+                    </div>
 
-									<div className="grid gap-4 md:grid-cols-2">
-										<div>
-											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-												Event Type
-											</label>
-											<select
-												name="eventType"
-												value={formData.eventType}
-												onChange={handleInputChange}
-												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
-												style={{
-													backgroundColor: "var(--page-bg)",
-													borderColor: "var(--border-subtle)",
-													color: "var(--foreground)",
-												}}
-											>
-												<option value="">Select type</option>
-												<option value="Conference">Conference</option>
-												<option value="Workshop">Workshop</option>
-												<option value="Seminar">Seminar</option>
-												<option value="Training">Training</option>
-												<option value="Meetup">Meetup</option>
-												<option value="Other">Other</option>
-											</select>
-										</div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          Event Type
+                        </label>
+                        <select
+                          name="eventType"
+                          value={formData.eventType}
+                          onChange={handleInputChange}
+                          className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                          style={{
+                            backgroundColor: "var(--page-bg)",
+                            borderColor: "var(--border-subtle)",
+                            color: "var(--foreground)",
+                          }}
+                        >
+                          <option value="">Select type</option>
+                          <option value="Conference">Conference</option>
+                          <option value="Workshop">Workshop</option>
+                          <option value="Seminar">Seminar</option>
+                          <option value="Training">Training</option>
+                          <option value="Meetup">Meetup</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
 
-										<div>
-											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-												Expected Attendance *
-											</label>
-											<input
-												type="number"
-												name="expectedAttendance"
-												value={formData.expectedAttendance}
-												onChange={handleInputChange}
-												placeholder="e.g., 150"
-												min="1"
-												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
-												style={{
-													backgroundColor: "var(--page-bg)",
-													borderColor: "var(--border-subtle)",
-													color: "var(--foreground)",
-												}}
-											/>
-										</div>
-									</div>
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          Expected Attendance *
+                        </label>
+                        <input
+                          type="number"
+                          name="expectedAttendance"
+                          value={formData.expectedAttendance}
+                          onChange={handleInputChange}
+                          placeholder="e.g., 150"
+                          min="1"
+                          className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                          style={{
+                            backgroundColor: "var(--page-bg)",
+                            borderColor: "var(--border-subtle)",
+                            color: "var(--foreground)",
+                          }}
+                        />
+                      </div>
+                    </div>
 
-									<div>
-										<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-											Description
-										</label>
-										<textarea
-											name="description"
-											value={formData.description}
-											onChange={handleInputChange}
-											placeholder="Describe your event..."
-											rows="4"
-											className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
-											style={{
-												backgroundColor: "var(--page-bg)",
-												borderColor: "var(--border-subtle)",
-												color: "var(--foreground)",
-											}}
-										/>
-									</div>
-								</div>
-							</section>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                        Description
+                      </label>
+                      <textarea
+                        name="description"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        placeholder="Describe your event..."
+                        rows="4"
+                        className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                        style={{
+                          backgroundColor: "var(--page-bg)",
+                          borderColor: "var(--border-subtle)",
+                          color: "var(--foreground)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </section>
 
-							{/* Date & Time */}
-							<section
-								className="rounded-lg border p-6"
-								style={{
-									backgroundColor: "var(--surface)",
-									borderColor: "var(--border-subtle)",
-								}}
-							>
-								<h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
-									Date & Time
-								</h2>
+                {/* Date & Time */}
+                <section
+                  className="rounded-lg border p-6 animate-[fadeIn_0.5s_ease-out]"
+                  style={{
+                    backgroundColor: "var(--surface)",
+                    borderColor: "var(--border-subtle)",
+                  }}
+                >
+                  <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+                    Date & Time
+                  </h2>
 
-								<div className="space-y-4">
-									<div className="grid gap-4 md:grid-cols-3">
-										<div>
-											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-												Event Date *
-											</label>
-											<input
-												type="date"
-												name="eventDate"
-												value={formData.eventDate}
-												onChange={handleInputChange}
-												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
-												style={{
-													backgroundColor: "var(--page-bg)",
-													borderColor: "var(--border-subtle)",
-													color: "var(--foreground)",
-												}}
-											/>
-										</div>
+                  <div className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          Event Date *
+                        </label>
+                        <input
+                          type="date"
+                          name="eventDate"
+                          value={formData.eventDate}
+                          onChange={handleInputChange}
+                          className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                          style={{
+                            backgroundColor: "var(--page-bg)",
+                            borderColor: "var(--border-subtle)",
+                            color: "var(--foreground)",
+                          }}
+                        />
+                      </div>
 
-										<div>
-											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-												Start Time *
-											</label>
-											<input
-												type="time"
-												name="startTime"
-												value={formData.startTime}
-												onChange={handleInputChange}
-												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
-												style={{
-													backgroundColor: "var(--page-bg)",
-													borderColor: "var(--border-subtle)",
-													color: "var(--foreground)",
-												}}
-											/>
-										</div>
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          Start Time *
+                        </label>
+                        <input
+                          type="time"
+                          name="startTime"
+                          value={formData.startTime}
+                          onChange={handleInputChange}
+                          className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                          style={{
+                            backgroundColor: "var(--page-bg)",
+                            borderColor: "var(--border-subtle)",
+                            color: "var(--foreground)",
+                          }}
+                        />
+                      </div>
 
-										<div>
-											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-												End Time
-											</label>
-											<input
-												type="time"
-												name="endTime"
-												value={formData.endTime}
-												onChange={handleInputChange}
-												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
-												style={{
-													backgroundColor: "var(--page-bg)",
-													borderColor: "var(--border-subtle)",
-													color: "var(--foreground)",
-												}}
-											/>
-										</div>
-									</div>
-								</div>
-							</section>
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          End Time
+                        </label>
+                        <input
+                          type="time"
+                          name="endTime"
+                          value={formData.endTime}
+                          onChange={handleInputChange}
+                          className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                          style={{
+                            backgroundColor: "var(--page-bg)",
+                            borderColor: "var(--border-subtle)",
+                            color: "var(--foreground)",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </section>
 
-							{/* Location */}
-							<section
-								className="rounded-lg border p-6"
-								style={{
-									backgroundColor: "var(--surface)",
-									borderColor: "var(--border-subtle)",
-								}}
-							>
-								<h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
-									Location
-								</h2>
+                {/* Location */}
+                <section
+                  className="rounded-lg border p-6 animate-[fadeIn_0.6s_ease-out]"
+                  style={{
+                    backgroundColor: "var(--surface)",
+                    borderColor: "var(--border-subtle)",
+                  }}
+                >
+                  <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+                    Location
+                  </h2>
 
-								<div className="space-y-4">
-									<div>
-										<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-											Venue Name
-										</label>
-										<input
-											type="text"
-											name="venue"
-											value={formData.venue}
-											onChange={handleInputChange}
-											placeholder="e.g., Grand Ballroom"
-											className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
-											style={{
-												backgroundColor: "var(--page-bg)",
-												borderColor: "var(--border-subtle)",
-												color: "var(--foreground)",
-											}}
-										/>
-									</div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                        Venue Name
+                      </label>
+                      <input
+                        type="text"
+                        name="venue"
+                        value={formData.venue}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Grand Ballroom"
+                        className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                        style={{
+                          backgroundColor: "var(--page-bg)",
+                          borderColor: "var(--border-subtle)",
+                          color: "var(--foreground)",
+                        }}
+                      />
+                    </div>
 
-									<div>
-										<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-											Full Address
-										</label>
-										<input
-											type="text"
-											name="fullAddress"
-											value={formData.fullAddress}
-											onChange={handleInputChange}
-											placeholder="Street, City, State, ZIP"
-											className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
-											style={{
-												backgroundColor: "var(--page-bg)",
-												borderColor: "var(--border-subtle)",
-												color: "var(--foreground)",
-											}}
-										/>
-									</div>
-								</div>
-							</section>
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                        Full Address
+                      </label>
+                      <input
+                        type="text"
+                        name="fullAddress"
+                        value={formData.fullAddress}
+                        onChange={handleInputChange}
+                        placeholder="Street, City, State, ZIP"
+                        className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                        style={{
+                          backgroundColor: "var(--page-bg)",
+                          borderColor: "var(--border-subtle)",
+                          color: "var(--foreground)",
+                        }}
+                      />
+                    </div>
+                  </div>
+                </section>
 
-							{/* Features */}
-							<section
-								className="rounded-lg border p-6"
-								style={{
-									backgroundColor: "var(--surface)",
-									borderColor: "var(--border-subtle)",
-								}}
-							>
-								<h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
-									Features
-								</h2>
+                {/* Features */}
+                <section
+                  className="rounded-lg border p-6 animate-[fadeIn_0.7s_ease-out]"
+                  style={{
+                    backgroundColor: "var(--surface)",
+                    borderColor: "var(--border-subtle)",
+                  }}
+                >
+                  <h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+                    Features
+                  </h2>
 
-								<div className="space-y-3">
-									<label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:opacity-80 transition"
-										style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
-										<input
-											type="checkbox"
-											name="rfidEnabled"
-											checked={formData.rfidEnabled}
-											onChange={handleInputChange}
-											className="w-4 h-4 rounded"
-										/>
-										<div>
-											<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-												RFID Scanning
-											</p>
-											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
-												Enable RFID card scanning for attendance
-											</p>
-										</div>
-									</label>
+                  <div className="space-y-3">
+                    <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:opacity-80 transition hover:scale-[1.01]"
+                      style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
+                      <input
+                        type="checkbox"
+                        name="rfidEnabled"
+                        checked={formData.rfidEnabled}
+                        onChange={handleInputChange}
+                        className="w-4 h-4 rounded"
+                      />
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          RFID Scanning
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          Enable RFID card scanning for attendance
+                        </p>
+                      </div>
+                    </label>
 
-									<label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:opacity-80 transition"
-										style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
-										<input
-											type="checkbox"
-											name="faceRecognitionEnabled"
-											checked={formData.faceRecognitionEnabled}
-											onChange={handleInputChange}
-											className="w-4 h-4 rounded"
-										/>
-										<div>
-											<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-												Face Recognition
-											</p>
-											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
-												Enable facial recognition for attendance verification
-											</p>
-										</div>
-									</label>
+                    <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:opacity-80 transition hover:scale-[1.01]"
+                      style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
+                      <input
+                        type="checkbox"
+                        name="faceRecognitionEnabled"
+                        checked={formData.faceRecognitionEnabled}
+                        onChange={handleInputChange}
+                        className="w-4 h-4 rounded"
+                      />
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          Face Recognition
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          Enable facial recognition for attendance verification
+                        </p>
+                      </div>
+                    </label>
 
-									<label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:opacity-80 transition"
-										style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
-										<input
-											type="checkbox"
-											name="geofencingEnabled"
-											checked={formData.geofencingEnabled}
-											onChange={handleInputChange}
-											className="w-4 h-4 rounded"
-										/>
-										<div>
-											<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-												Geofencing
-											</p>
-											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
-												Enable location-based check-in restrictions
-											</p>
-										</div>
-									</label>
-								</div>
-							</section>
+                    <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:opacity-80 transition hover:scale-[1.01]"
+                      style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
+                      <input
+                        type="checkbox"
+                        name="geofencingEnabled"
+                        checked={formData.geofencingEnabled}
+                        onChange={handleInputChange}
+                        className="w-4 h-4 rounded"
+                      />
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          Geofencing
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          Enable location-based check-in restrictions
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </section>
 
-							{/* Submit Button */}
-							<div className="flex gap-3">
-								<button
-									type="button"
-									onClick={() => router.back()}
-									className="flex-1 rounded-lg px-6 py-3 font-semibold text-sm transition hover:opacity-90"
-									style={{
-										backgroundColor: "var(--surface)",
-										borderColor: "var(--border-subtle)",
-										border: "1px solid",
-										color: "var(--foreground)",
-									}}
-								>
-									Cancel
-								</button>
-								<button
-									type="submit"
-									disabled={isLoading}
-									className="flex-1 rounded-lg px-6 py-3 font-semibold text-sm transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-									style={{
-										backgroundColor: "#3b82f6",
-										color: "white",
-									}}
-								>
-									{isLoading ? "Creating..." : "Create Event"}
-								</button>
-							</div>
-						</form>
-					</div>
-				</main>
-			</div>
-		</div>
+                {/* Submit Button */}
+                <div className="flex gap-3 animate-[fadeIn_0.8s_ease-out]">
+                  <button
+                    type="button"
+                    onClick={() => router.back()}
+                    className="flex-1 rounded-lg px-6 py-3 font-semibold text-sm transition hover:opacity-90 hover:scale-[1.01] active:scale-95"
+                    style={{
+                      backgroundColor: "var(--surface)",
+                      borderColor: "var(--border-subtle)",
+                      border: "1px solid",
+                      color: "var(--foreground)",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="flex-1 rounded-lg px-6 py-3 font-semibold text-sm transition hover:opacity-90 hover:scale-[1.01] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      backgroundColor: "#3b82f6",
+                      color: "white",
+                    }}
+                  >
+                    {isLoading ? "Creating..." : "Create Event"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </main>
+        </div>
+      </div>
 	);
 }
