@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../../components/SiteHeader";
+import DashboardToolbar from "../../components/DashboardToolbar";
 import {
 	Menu,
 	X,
@@ -19,16 +20,16 @@ import {
 	BarChart3,
 	TrendingUp,
 	Check,
+	Plus,
+	LogIn,
+	LogOut as LogOutIcon,
 } from "lucide-react";
 
-function Sidebar({ isOpen, onClose, onLogout }) {
-	const menuItems = [
-		{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
-		{ label: "Create Event", icon: Zap, href: "/orgDashboard/create-event" },
-		{ label: "Active Events", icon: Calendar, href: "#events" },
-		{ label: "Participants", icon: Users, href: "#participants" },
-		{ label: "Analytics", icon: TrendingUp, href: "#analytics" },
-	];
+	function Sidebar({ isOpen, onClose, onLogout }) {
+		const menuItems = [
+			{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
+			{ label: "Create Event", icon: Zap, href: "/orgDashboard/create-event" },
+		];
 
 	return (
 		<>
@@ -77,7 +78,7 @@ function Sidebar({ isOpen, onClose, onLogout }) {
 									key={item.label}
 									href={item.href}
 									onClick={onClose}
-									className="mb-1 flex items-center gap-3 rounded-lg px-4 py-2.5 transition-all hover:bg-opacity-30"
+									className="mb-1 flex items-center gap-3 rounded-lg px-4 py-2.5 transition-all hover:bg-opacity-30 ef-animate-fade-in"
 									style={{
 										backgroundColor: "rgba(59, 130, 246, 0.1)",
 										color: "var(--foreground)",

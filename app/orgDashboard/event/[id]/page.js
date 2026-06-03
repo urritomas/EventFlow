@@ -31,8 +31,6 @@ function Sidebar({ isOpen, onClose, onLogout }) {
 	const menuItems = [
 		{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
 		{ label: "Create Event", icon: Zap, href: "/orgDashboard/create-event" },
-		{ label: "Active Events", icon: Calendar, href: "#events" },
-		{ label: "Analytics", icon: TrendingUp, href: "#analytics" },
 	];
 
 	return (
@@ -394,39 +392,41 @@ export default function EventDetailsPage() {
 						</section>
 
 						{/* Tabs */}
-						<div className="flex gap-2 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-							{[{ id: "overview", label: "Overview", icon: Calendar }, { id: "unified-scanner", label: "Quick Scan", icon: Zap }, { id: "attendance", label: "Attendees", icon: Users }, { id: "analytics", label: "Analytics", icon: TrendingUp }].map((tab) => (
-								<button
-									key={tab.id}
-									onClick={() => setActiveTab(tab.id)}
-									className={`px-4 py-3 font-medium text-sm transition flex items-center gap-2 ${
-										activeTab === tab.id ? "border-b-2" : ""
-									}`}
-									style={{
-										color:
-											activeTab === tab.id ? "#3b82f6" : "var(--text-muted)",
-										borderBottomColor: activeTab === tab.id ? "#3b82f6" : "transparent",
-									}}
-								>
-									<tab.icon size={16} />
-									{tab.label}
-									{tab.id === "unified-scanner" && (
-										<span
-											className="rounded-full px-2 py-0.5 text-xs font-bold"
-											style={{
-												backgroundColor: "rgba(59, 130, 246, 0.15)",
-												color: "#3b82f6",
-											}}
-										>
-											FAST
-										</span>
-									)}
-								</button>
-							))}
-						</div>
+					<div className="flex gap-2 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+						{[
+							{ id: "overview", label: "Overview", icon: Calendar },
+							{ id: "unified-scanner", label: "Quick Scan", icon: Zap },
+							{ id: "attendance", label: "Attendees", icon: Users },
+						].map((tab) => (
+							<button
+								key={tab.id}
+								onClick={() => setActiveTab(tab.id)}
+								className={`px-4 py-3 font-medium text-sm transition flex items-center gap-2 ${
+									activeTab === tab.id ? "border-b-2" : ""
+								}`}
+								style={{
+									color: activeTab === tab.id ? "#3b82f6" : "var(--text-muted)",
+									borderBottomColor: activeTab === tab.id ? "#3b82f6" : "transparent",
+								}}
+							>
+								<tab.icon size={16} />
+								{tab.label}
+								{tab.id === "unified-scanner" && (
+									<span
+										className="rounded-full px-2 py-0.5 text-xs font-bold"
+										style={{
+											backgroundColor: "rgba(59, 130, 246, 0.15)",
+											color: "#3b82f6",
+										}}
+									>
+										FAST
+									</span>
+								)}
+							</button>
+						))}
+					</div>
 
-						{/* Overview Tab */}
-						{activeTab === "overview" && (
+					{activeTab === "overview" && (
 							<section
 								className="rounded-lg border p-6"
 								style={{
@@ -739,31 +739,6 @@ export default function EventDetailsPage() {
 										</tbody>
 									</table>
 								</div>
-							</section>
-						)}
-
-						{/* Analytics Tab */}
-						{activeTab === "analytics" && (
-							<section
-								className="rounded-lg border p-6"
-								style={{
-									backgroundColor: "var(--surface)",
-									borderColor: "var(--border-subtle)",
-								}}
-							>
-								<h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
-									Event Analytics
-								</h2>
-								<button
-									onClick={() => router.push(`/orgDashboard/event/${eventId}/analytics`)}
-									className="w-full md:w-auto rounded-lg px-6 py-2 font-semibold text-sm transition hover:opacity-90"
-									style={{
-										backgroundColor: "#3b82f6",
-										color: "white",
-									}}
-								>
-									View Detailed Analytics
-								</button>
 							</section>
 						)}
 					</div>

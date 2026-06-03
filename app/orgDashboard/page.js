@@ -16,11 +16,15 @@ import {
 	AlertCircle,
 	Download,
 	Plus,
-	Clock,
-	MapPin,
 	LogIn,
 	LogOut as LogOutIcon,
 	ChevronRight,
+	Clock,
+	MapPin,
+	Search,
+	ClipboardList,
+	SlidersHorizontal,
+	User,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
@@ -28,9 +32,6 @@ function Sidebar({ isOpen, onClose, onLogout }) {
 	const menuItems = [
 		{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
 		{ label: "Create Event", icon: Plus, href: "/orgDashboard/create-event" },
-		{ label: "Active Events", icon: Calendar, href: "#events" },
-		{ label: "Participants", icon: Users, href: "#participants" },
-		{ label: "Analytics", icon: TrendingUp, href: "#analytics" },
 	];
 
 	return (
@@ -55,10 +56,7 @@ function Sidebar({ isOpen, onClose, onLogout }) {
 								>
 									ORG
 								</div>
-								<span
-									className="text-sm font-bold tracking-wider"
-									style={{ color: "var(--foreground)" }}
-								>
+								<span className="text-sm font-bold tracking-wider" style={{ color: "var(--foreground)" }}>
 									ORG PANEL
 								</span>
 							</div>
@@ -80,7 +78,7 @@ function Sidebar({ isOpen, onClose, onLogout }) {
 									key={item.label}
 									onClick={() => {
 										onClose();
-										if (item.href !== "#events" && item.href !== "#participants" && item.href !== "#analytics") {
+										if (item.href !== "#events") {
 											router.push(item.href);
 										}
 									}}
@@ -97,7 +95,7 @@ function Sidebar({ isOpen, onClose, onLogout }) {
 						})}
 					</nav>
 
-				<div className="border-t border-white/10 px-4 py-4">
+					<div className="border-t border-white/10 px-4 py-4">
 						<button
 							onClick={onLogout}
 							className="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 transition-all hover:bg-opacity-80 text-sm font-medium"
@@ -165,8 +163,6 @@ export default function OrgDashboard() {
 	};
 
 	const [activeEvents, setActiveEvents] = useState([]);
-	const [participants, setParticipants] = useState([]);
-	const [certificates, setCertificates] = useState([]);
 	const [stats, setStats] = useState({ activeEvents: 0, totalParticipants: 0, avgAttendance: 0, verifiedUsers: 0 });
 	const [myEvents, setMyEvents] = useState([]);
 	const [selectedEvent, setSelectedEvent] = useState(null);
@@ -178,19 +174,14 @@ export default function OrgDashboard() {
 			const userRole = localStorage.getItem("userRole");
 
 			if (userRole === "organization") {
-			// Fetch all organization events
-			const { data: createdEvents, error: eventsError } = await supabase
-				.from("events")
-				.select("*")
+				const { data: createdEvents, error: eventsError } = await supabase.from("events").select("*");
 
 				if (eventsError) {
 					console.error("Error fetching events:", eventsError);
 				} else if (createdEvents) {
-					console.log("Fetched created events:", createdEvents);
 					setMyEvents(createdEvents);
 				}
 
-				// Fetch organization events
 				const { data: events, error: activeError } = await supabase
 					.from("events")
 					.select("*")
@@ -200,50 +191,15 @@ export default function OrgDashboard() {
 				if (activeError) {
 					console.error("Error fetching active events:", activeError);
 				} else if (events) {
-					const eventList = events.slice(0, 2).map(e => ({
+					const eventList = events.slice(0, 2).map((e) => ({
 						id: e.event_id,
 						name: e.event_name,
 						capacity: e.expected_attendance,
 						registered: Math.floor(e.expected_attendance * 0.64),
-						date: e.event_date
+						date: e.event_date,
 					}));
 					setActiveEvents(eventList);
-					setStats(prev => ({ ...prev, activeEvents: events.length }));
-				}
-
-				const { data: attendanceData, error: attendanceError } = await supabase
-				.from("attendance_logs")
-					.select("*, participants(*)");
-
-				if (attendanceError) {
-					console.error("Error fetching attendance:", attendanceError);
-				} else if (attendanceData) {
-					const participantList = attendanceData.slice(0, 5).map(a => ({
-						id: a.participant_id,
-						name: a.participants?.name || "Participant",
-						email: a.participants?.email || "N/A",
-						attendance: Math.floor(Math.random() * 40) + 60,
-						verified: a.verified
-					}));
-					setParticipants(participantList);
-					const avgAtt = participantList.reduce((sum, p) => sum + p.attendance, 0) / participantList.length;
-					setStats(prev => ({
-						...prev,
-						totalParticipants: attendanceData.length,
-						avgAttendance: Math.floor(avgAtt),
-						verifiedUsers: attendanceData.filter(a => a.verified).length
-					}));
-				}
-
-				// Generate certificates for eligible participants
-				if (attendanceData) {
-					const eligible = attendanceData.filter(a => a.verified).slice(0, 3).map(a => ({
-						id: a.participant_id,
-						name: a.participants?.name || "Participant",
-						email: a.participants?.email || "N/A",
-						eligible: true
-					}));
-					setCertificates(eligible);
+					setStats((prev) => ({ ...prev, activeEvents: events.length }));
 				}
 			}
 		};
@@ -251,7 +207,6 @@ export default function OrgDashboard() {
 		if (isAuthorized) {
 			fetchData();
 
-			// Set up real-time subscriptions
 			const supabase = createClient();
 			const subscription = supabase
 				.channel("org-updates")
@@ -266,20 +221,8 @@ export default function OrgDashboard() {
 						fetchData();
 					}
 				)
-				.on(
-					"postgres_changes",
-					{
-						event: "*",
-						schema: "public",
-						table: "attendance",
-					},
-					() => {
-						fetchData();
-					}
-				)
 				.subscribe();
 
-			// Auto-refresh every 5 seconds as fallback
 			const interval = setInterval(fetchData, 5000);
 
 			return () => {
@@ -319,20 +262,25 @@ export default function OrgDashboard() {
 
 					<div className="space-y-8 overflow-y-auto p-6 md:p-8">
 						{/* Overview */}
-						<section id="dashboard">
+						<section id="dashboard" className="ef-animate-fade-in">
 							<h2 className="mb-4 text-lg font-bold" style={{ color: "var(--foreground)" }}>
 								Overview
 							</h2>
 							<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-							<StatCard title="Active Events" value={stats.activeEvents} subtitle="2 live now" icon={Calendar} />
-							<StatCard title="Total Participants" value={stats.totalParticipants} subtitle="Across all events" icon={Users} />
-							<StatCard title="Avg Attendance" value={`${stats.avgAttendance}%`} subtitle="This month" icon={TrendingUp} />
-							<StatCard title="Verified Users" value={stats.verifiedUsers} subtitle="98% verified" icon={Check} />
+								<StatCard title="Active Events" value={stats.activeEvents} subtitle="2 live now" icon={Calendar} />
+								<StatCard
+									title="Total Participants"
+									value={stats.totalParticipants}
+									subtitle="Across all events"
+									icon={Users}
+								/>
+								<StatCard title="Avg Attendance" value={`${stats.avgAttendance}%`} subtitle="This month" icon={TrendingUp} />
+								<StatCard title="Verified Users" value={stats.verifiedUsers} subtitle="98% verified" icon={Check} />
 							</div>
 						</section>
 
 						{/* Active Events */}
-						<section id="events" className="space-y-4">
+						<section id="events" className="space-y-4 ef-animate-fade-in ef-animate-delay-1">
 							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
 								Active Events
 							</h2>
@@ -340,7 +288,7 @@ export default function OrgDashboard() {
 								{activeEvents.map((event) => (
 									<div
 										key={event.id}
-										className="rounded-lg border p-5"
+										className="rounded-lg border p-5 ef-animate-fade-in"
 										style={{
 											backgroundColor: "var(--surface)",
 											borderColor: "var(--border-subtle)",
@@ -349,9 +297,7 @@ export default function OrgDashboard() {
 										<h3 className="font-semibold" style={{ color: "var(--foreground)" }}>
 											{event.name}
 										</h3>
-										<p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-											{event.date}
-										</p>
+										<p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{event.date}</p>
 
 										<div className="mt-4 space-y-2">
 											<div className="flex items-center justify-between text-sm">
@@ -360,7 +306,10 @@ export default function OrgDashboard() {
 													{event.registered} / {event.capacity}
 												</span>
 											</div>
-											<div className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: "rgba(59, 130, 246, 0.1)" }}>
+											<div
+												className="h-2 rounded-full overflow-hidden"
+												style={{ backgroundColor: "rgba(59, 130, 246, 0.1)" }}
+											>
 												<div
 													className="h-full rounded-full transition-all"
 													style={{
@@ -379,7 +328,7 @@ export default function OrgDashboard() {
 						</section>
 
 						{/* My Created Events */}
-						<section id="my-events" className="space-y-4">
+						<section id="my-events" className="space-y-4 ef-animate-fade-in ef-animate-delay-2">
 							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
 								My Created Events
 							</h2>
@@ -413,7 +362,7 @@ export default function OrgDashboard() {
 												setSelectedEvent(event);
 												setShowModal(true);
 											}}
-											className="rounded-lg border p-5 text-left transition hover:opacity-80 cursor-pointer"
+											className="rounded-lg border p-5 text-left transition hover:opacity-80 cursor-pointer ef-animate-fade-in"
 											style={{
 												backgroundColor: "var(--surface)",
 												borderColor: "var(--border-subtle)",
@@ -584,13 +533,13 @@ export default function OrgDashboard() {
 														<span style={{ color: "var(--foreground)" }}>Face Recognition</span>
 													</div>
 												)}
-											{selectedEvent.with_Geo && (
-												<div className="flex items-center gap-2">
-													<MapPin size={16} style={{ color: "#10b981" }} />
-													<span style={{ color: "var(--foreground)" }}>Geofencing</span>
-												</div>
-											)}
-										</div>
+												{selectedEvent.with_Geo && (
+													<div className="flex items-center gap-2">
+														<MapPin size={16} style={{ color: "#10b981" }} />
+														<span style={{ color: "var(--foreground)" }}>Geofencing</span>
+													</div>
+												)}
+											</div>
 										</div>
 
 										{/* Status */}
@@ -645,7 +594,6 @@ export default function OrgDashboard() {
 												</button>
 												<button
 													onClick={() => {
-														// Open checkout scanner
 														router.push(`/orgDashboard/event/${selectedEvent.event_id}?mode=checkout`);
 														setShowModal(false);
 													}}
@@ -659,87 +607,14 @@ export default function OrgDashboard() {
 													Check Out
 												</button>
 											</div>
-											<button
-												onClick={() => {
-													router.push(`/orgDashboard/event/${selectedEvent.event_id}/analytics`);
-													setShowModal(false);
-												}}
-												className="w-full rounded-lg px-4 py-3 font-semibold transition hover:opacity-90"
-												style={{
-													backgroundColor: "rgba(16, 185, 129, 0.15)",
-													color: "#10b981",
-												}}
-											>
-												View Analytics
-											</button>
 										</div>
 									</div>
 								</div>
 							</div>
 						)}
 
-						
-						<section id="participants" className="space-y-4">
-							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
-								Participant Management
-							</h2>
-							<div className="overflow-x-auto rounded-lg border" style={{ borderColor: "var(--border-subtle)" }}>
-								<table className="w-full text-sm">
-									<thead>
-										<tr style={{ backgroundColor: "var(--surface-soft)", borderColor: "var(--border-subtle)" }} className="border-b">
-											<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Name
-											</th>
-											<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Email
-											</th>
-											<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Attendance %
-											</th>
-											<th className="px-4 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-												Verified
-											</th>
-										</tr>
-									</thead>
-									<tbody>
-										{participants.map((p, idx) => (
-											<tr
-												key={p.id}
-												style={{
-													backgroundColor: "var(--surface)",
-													borderColor: "var(--border-subtle)",
-												}}
-												className={idx !== participants.length - 1 ? "border-b" : ""}
-											>
-												<td className="px-4 py-3 font-medium" style={{ color: "var(--foreground)" }}>
-													{p.name}
-												</td>
-												<td className="px-4 py-3" style={{ color: "var(--text-muted)" }}>
-													{p.email}
-												</td>
-												<td className="px-4 py-3">
-													<span style={{ color: "#10b981" }}>{p.attendance}%</span>
-												</td>
-												<td className="px-4 py-3">
-													{p.verified ? (
-														<span className="flex items-center gap-1" style={{ color: "#10b981" }}>
-															<Check size={14} /> Yes
-														</span>
-													) : (
-														<span className="flex items-center gap-1" style={{ color: "#fb923c" }}>
-															<AlertCircle size={14} /> Pending
-														</span>
-													)}
-												</td>
-											</tr>
-										))}
-									</tbody>
-								</table>
-							</div>
-						</section>
-
 						{/* Attendance Monitoring */}
-						<section id="attendance" className="space-y-4">
+						<section id="attendance" className="space-y-4 ef-animate-fade-in ef-animate-delay-3">
 							<div className="flex items-center justify-between">
 								<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
 									Attendance Monitoring
@@ -813,7 +688,7 @@ export default function OrgDashboard() {
 						</section>
 
 						{/* Certificate Management */}
-						<section id="certificates" className="space-y-4 pb-8">
+						<section id="certificates" className="space-y-4 pb-8 ef-animate-fade-in ef-animate-delay-4">
 							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
 								Certificate Management
 							</h2>
@@ -842,36 +717,6 @@ export default function OrgDashboard() {
 										<span>Payment status: Confirmed</span>
 									</li>
 								</ul>
-							</div>
-
-							<div
-								className="rounded-lg border p-5"
-								style={{
-									backgroundColor: "var(--surface)",
-									borderColor: "var(--border-subtle)",
-								}}
-							>
-								<h3 className="font-semibold text-sm mb-3" style={{ color: "var(--foreground)" }}>
-									Eligible Participants ({certificates.length})
-								</h3>
-								<div className="space-y-2">
-									{certificates.map((cert) => (
-										<div key={cert.id} className="flex items-center justify-between p-2 rounded hover:bg-opacity-50">
-											<div>
-												<p className="font-medium text-sm" style={{ color: "var(--foreground)" }}>
-													{cert.name}
-												</p>
-												<p className="text-xs" style={{ color: "var(--text-muted)" }}>
-													{cert.email}
-												</p>
-											</div>
-											<button className="rounded-lg px-3 py-1 text-xs font-semibold transition hover:opacity-90" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
-												<Download size={12} className="inline mr-1" />
-												Generate
-											</button>
-										</div>
-									))}
-								</div>
 							</div>
 						</section>
 					</div>
