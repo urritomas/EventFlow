@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 import {
   CheckCircle,
   XCircle,
@@ -11,7 +12,10 @@ import {
   ArrowLeft,
   Clock,
   ShieldCheck,
+  Camera,
+  CreditCard,
 } from "lucide-react";
+
 
 const SCAN_INTERVAL_MS = 2000;
 const RESULT_HOLD_MS   = 2500;
@@ -27,8 +31,11 @@ export default function AttendanceScannerPage() {
     if (!isLoggedIn || userRole !== "organization") {
       router.push("/login");
     } else {
-      setIsAuthorized(true);
+      // Avoid setState directly in effect if possible; we'll flip on next frame.
+      // (eslint react-hooks/set-state-in-effect)
+      setTimeout(() => setIsAuthorized(true), 0);
     }
+
   }, [router]);
 
   const videoRef      = useRef(null);

@@ -1,0 +1,634 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
+import SiteHeader from "../../components/SiteHeader";
+import {
+	Menu,
+	X,
+	LogOut,
+	ArrowLeft,
+	AlertCircle,
+	CheckCircle,
+	Calendar,
+	Clock,
+	MapPin,
+	Users,
+	Zap,
+	BarChart3,
+	TrendingUp,
+	Check,
+} from "lucide-react";
+
+function Sidebar({ isOpen, onClose, onLogout }) {
+	const menuItems = [
+		{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
+		{ label: "Create Event", icon: Zap, href: "/orgDashboard/create-event" },
+		{ label: "Active Events", icon: Calendar, href: "#events" },
+		{ label: "Participants", icon: Users, href: "#participants" },
+		{ label: "Analytics", icon: TrendingUp, href: "#analytics" },
+	];
+
+	return (
+		<>
+			{isOpen && <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={onClose} />}
+			<aside
+				className={`fixed left-0 top-0 z-40 h-screen w-64 transform transition-transform duration-300 md:relative md:translate-x-0 ${
+					isOpen ? "translate-x-0" : "-translate-x-full"
+				}`}
+				style={{
+					backgroundColor: "var(--page-bg-soft)",
+					borderRight: "1px solid var(--border-subtle)",
+				}}
+			>
+				<div className="flex h-full flex-col">
+					<div className="border-b border-white/10 px-6 py-5">
+						<div className="flex items-center justify-between">
+							<div className="flex items-center gap-3">
+								<div
+									className="h-9 w-9 rounded-lg flex items-center justify-center font-bold text-sm"
+									style={{ backgroundColor: "#3b82f6", color: "white" }}
+								>
+									ORG
+								</div>
+								<span
+									className="text-sm font-bold tracking-wider"
+									style={{ color: "var(--foreground)" }}
+								>
+									ORG PANEL
+								</span>
+							</div>
+							<button
+								onClick={onClose}
+								className="md:hidden p-2 hover:opacity-70 transition"
+								style={{ color: "var(--foreground)" }}
+							>
+								<X size={20} />
+							</button>
+						</div>
+					</div>
+
+					<nav className="flex-1 overflow-y-auto px-4 py-6">
+						{menuItems.map((item) => {
+							const Icon = item.icon;
+							return (
+								<a
+									key={item.label}
+									href={item.href}
+									onClick={onClose}
+									className="mb-1 flex items-center gap-3 rounded-lg px-4 py-2.5 transition-all hover:bg-opacity-30"
+									style={{
+										backgroundColor: "rgba(59, 130, 246, 0.1)",
+										color: "var(--foreground)",
+									}}
+								>
+									<Icon size={18} style={{ color: "#3b82f6" }} />
+									<span className="text-sm font-medium">{item.label}</span>
+								</a>
+							);
+						})}
+					</nav>
+
+					<div className="border-t border-white/10 px-4 py-4">
+						<button
+							onClick={onLogout}
+							className="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 transition-all hover:bg-opacity-80 text-sm font-medium"
+							style={{
+								backgroundColor: "rgba(239, 68, 68, 0.12)",
+								color: "#ef4444",
+							}}
+						>
+							<LogOut size={16} />
+							<span>Logout</span>
+						</button>
+					</div>
+				</div>
+			</aside>
+		</>
+	);
+}
+
+export default function CreateEventPage() {
+	const router = useRouter();
+	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const [isAuthorized, setIsAuthorized] = useState(false);
+	const [isLoading, setIsLoading] = useState(false);
+	const [successMessage, setSuccessMessage] = useState("");
+	const [errorMessage, setErrorMessage] = useState("");
+
+	const [formData, setFormData] = useState({
+		eventName: "",
+		eventType: "",
+		eventDate: "",
+		startTime: "",
+		endTime: "",
+		venue: "",
+		fullAddress: "",
+		expectedAttendance: "",
+		description: "",
+		rfidEnabled: false,
+		faceRecognitionEnabled: false,
+		geofencingEnabled: false,
+	});
+
+	useEffect(() => {
+		const isLoggedIn = localStorage.getItem("isLoggedIn");
+		const userRole = localStorage.getItem("userRole");
+		if (!isLoggedIn || userRole !== "organization") {
+			router.push("/login");
+		} else {
+			setIsAuthorized(true);
+		}
+	}, [router]);
+
+	const handleLogout = () => {
+		localStorage.removeItem("isLoggedIn");
+		localStorage.removeItem("userRole");
+		localStorage.removeItem("orgId");
+		setSidebarOpen(false);
+		window.location.href = "/login";
+	};
+
+	const handleInputChange = (e) => {
+		const { name, value, type, checked } = e.target;
+		setFormData((prev) => ({
+			...prev,
+			[name]: type === "checkbox" ? checked : value,
+		}));
+	};
+
+	const handleSubmit = async (e) => {
+		e.preventDefault();
+		setErrorMessage("");
+		setSuccessMessage("");
+		setIsLoading(true);
+
+		try {
+			// Validate form
+			if (!formData.eventName.trim()) {
+				throw new Error("Event name is required");
+			}
+			if (!formData.eventDate) {
+				throw new Error("Event date is required");
+			}
+			if (!formData.startTime) {
+				throw new Error("Start time is required");
+			}
+			if (!formData.expectedAttendance || parseInt(formData.expectedAttendance) <= 0) {
+				throw new Error("Expected attendance must be greater than 0");
+			}
+
+			const supabase = createClient();
+			const orgId = localStorage.getItem("orgId");
+			const email = localStorage.getItem("email");
+			const username = localStorage.getItem("username");
+
+			// Create event with column mapping matching existing Supabase table
+			const eventPayload = {
+				event_name: formData.eventName,
+				event_type: formData.eventType || "General",
+				event_date: formData.eventDate,
+				start_time: formData.startTime,
+				end_time: formData.endTime || null,
+				venue_name: formData.venue,
+				full_address: formData.fullAddress,
+				expected_attendance: parseInt(formData.expectedAttendance),
+				is_active: true,
+				is_accepted: false,
+			};
+
+			console.log("Creating event with payload:", eventPayload);
+
+			const { data: eventData, error: eventError } = await supabase
+				.from("events")
+				.insert([eventPayload])
+				.select();
+
+			console.log("Event creation response:", { eventData, eventError });
+
+			if (eventError) {
+				throw new Error(eventError.message || "Failed to create event. Please check all required fields.");
+			}
+
+			if (!eventData || eventData.length === 0) {
+				throw new Error("Event was created but returned no data");
+			}
+
+			setSuccessMessage("✓ Event created successfully! Redirecting...");
+			setFormData({
+				eventName: "",
+				eventType: "",
+				eventDate: "",
+				startTime: "",
+				endTime: "",
+				venue: "",
+				fullAddress: "",
+				expectedAttendance: "",
+				description: "",
+				rfidEnabled: false,
+				faceRecognitionEnabled: false,
+				geofencingEnabled: false,
+			});
+
+			// Redirect to dashboard to see the new event
+			setTimeout(() => {
+				router.push("/orgDashboard");
+			}, 1500);
+		} catch (error) {
+			console.error("Error creating event:", error);
+			setErrorMessage(error.message || "Failed to create event. Please try again.");
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
+	if (!isAuthorized) return null;
+
+	return (
+		<div className="min-h-screen themed-screen" style={{ backgroundColor: "var(--page-bg)" }}>
+			<SiteHeader showBack={true} />
+			<div className="flex">
+				<Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={handleLogout} />
+
+				<main className="flex-1 overflow-y-auto h-screen">
+					<div
+						className="sticky top-0 z-20 border-b px-6 py-3 flex items-center justify-between"
+						style={{
+							backgroundColor: "var(--surface)",
+							borderColor: "var(--border-subtle)",
+						}}
+					>
+						<h1 className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>
+							Create New Event
+						</h1>
+						<button
+							onClick={() => setSidebarOpen(!sidebarOpen)}
+							className="rounded-lg p-2 transition hover:opacity-80 md:hidden"
+							style={{ backgroundColor: "var(--surface-soft)" }}
+						>
+							<Menu size={20} style={{ color: "var(--foreground)" }} />
+						</button>
+					</div>
+
+					<div className="space-y-6 overflow-y-auto p-6 md:p-8">
+						{/* Messages */}
+						{successMessage && (
+							<div
+								className="rounded-lg p-4 flex items-center gap-3"
+								style={{
+									backgroundColor: "rgba(16, 185, 129, 0.1)",
+									borderLeft: "4px solid #10b981",
+								}}
+							>
+								<CheckCircle size={20} style={{ color: "#10b981" }} />
+								<p style={{ color: "#10b981" }}>{successMessage}</p>
+							</div>
+						)}
+
+						{errorMessage && (
+							<div
+								className="rounded-lg p-4 flex items-center gap-3"
+								style={{
+									backgroundColor: "rgba(239, 68, 68, 0.1)",
+									borderLeft: "4px solid #ef4444",
+								}}
+							>
+								<AlertCircle size={20} style={{ color: "#ef4444" }} />
+								<p style={{ color: "#ef4444" }}>{errorMessage}</p>
+							</div>
+						)}
+
+						{/* Event Creation Form */}
+						<form onSubmit={handleSubmit} className="space-y-6">
+							{/* Basic Information */}
+							<section
+								className="rounded-lg border p-6"
+								style={{
+									backgroundColor: "var(--surface)",
+									borderColor: "var(--border-subtle)",
+								}}
+							>
+								<h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+									Basic Information
+								</h2>
+
+								<div className="space-y-4">
+									<div>
+										<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+											Event Name *
+										</label>
+										<input
+											type="text"
+											name="eventName"
+											value={formData.eventName}
+											onChange={handleInputChange}
+											placeholder="Enter event name"
+											className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
+											style={{
+												backgroundColor: "var(--page-bg)",
+												borderColor: "var(--border-subtle)",
+												color: "var(--foreground)",
+												"--tw-ring-color": "#3b82f6",
+											}}
+										/>
+									</div>
+
+									<div className="grid gap-4 md:grid-cols-2">
+										<div>
+											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+												Event Type
+											</label>
+											<select
+												name="eventType"
+												value={formData.eventType}
+												onChange={handleInputChange}
+												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
+												style={{
+													backgroundColor: "var(--page-bg)",
+													borderColor: "var(--border-subtle)",
+													color: "var(--foreground)",
+												}}
+											>
+												<option value="">Select type</option>
+												<option value="Conference">Conference</option>
+												<option value="Workshop">Workshop</option>
+												<option value="Seminar">Seminar</option>
+												<option value="Training">Training</option>
+												<option value="Meetup">Meetup</option>
+												<option value="Other">Other</option>
+											</select>
+										</div>
+
+										<div>
+											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+												Expected Attendance *
+											</label>
+											<input
+												type="number"
+												name="expectedAttendance"
+												value={formData.expectedAttendance}
+												onChange={handleInputChange}
+												placeholder="e.g., 150"
+												min="1"
+												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
+												style={{
+													backgroundColor: "var(--page-bg)",
+													borderColor: "var(--border-subtle)",
+													color: "var(--foreground)",
+												}}
+											/>
+										</div>
+									</div>
+
+									<div>
+										<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+											Description
+										</label>
+										<textarea
+											name="description"
+											value={formData.description}
+											onChange={handleInputChange}
+											placeholder="Describe your event..."
+											rows="4"
+											className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
+											style={{
+												backgroundColor: "var(--page-bg)",
+												borderColor: "var(--border-subtle)",
+												color: "var(--foreground)",
+											}}
+										/>
+									</div>
+								</div>
+							</section>
+
+							{/* Date & Time */}
+							<section
+								className="rounded-lg border p-6"
+								style={{
+									backgroundColor: "var(--surface)",
+									borderColor: "var(--border-subtle)",
+								}}
+							>
+								<h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+									Date & Time
+								</h2>
+
+								<div className="space-y-4">
+									<div className="grid gap-4 md:grid-cols-3">
+										<div>
+											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+												Event Date *
+											</label>
+											<input
+												type="date"
+												name="eventDate"
+												value={formData.eventDate}
+												onChange={handleInputChange}
+												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
+												style={{
+													backgroundColor: "var(--page-bg)",
+													borderColor: "var(--border-subtle)",
+													color: "var(--foreground)",
+												}}
+											/>
+										</div>
+
+										<div>
+											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+												Start Time *
+											</label>
+											<input
+												type="time"
+												name="startTime"
+												value={formData.startTime}
+												onChange={handleInputChange}
+												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
+												style={{
+													backgroundColor: "var(--page-bg)",
+													borderColor: "var(--border-subtle)",
+													color: "var(--foreground)",
+												}}
+											/>
+										</div>
+
+										<div>
+											<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+												End Time
+											</label>
+											<input
+												type="time"
+												name="endTime"
+												value={formData.endTime}
+												onChange={handleInputChange}
+												className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
+												style={{
+													backgroundColor: "var(--page-bg)",
+													borderColor: "var(--border-subtle)",
+													color: "var(--foreground)",
+												}}
+											/>
+										</div>
+									</div>
+								</div>
+							</section>
+
+							{/* Location */}
+							<section
+								className="rounded-lg border p-6"
+								style={{
+									backgroundColor: "var(--surface)",
+									borderColor: "var(--border-subtle)",
+								}}
+							>
+								<h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+									Location
+								</h2>
+
+								<div className="space-y-4">
+									<div>
+										<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+											Venue Name
+										</label>
+										<input
+											type="text"
+											name="venue"
+											value={formData.venue}
+											onChange={handleInputChange}
+											placeholder="e.g., Grand Ballroom"
+											className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
+											style={{
+												backgroundColor: "var(--page-bg)",
+												borderColor: "var(--border-subtle)",
+												color: "var(--foreground)",
+											}}
+										/>
+									</div>
+
+									<div>
+										<label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+											Full Address
+										</label>
+										<input
+											type="text"
+											name="fullAddress"
+											value={formData.fullAddress}
+											onChange={handleInputChange}
+											placeholder="Street, City, State, ZIP"
+											className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2"
+											style={{
+												backgroundColor: "var(--page-bg)",
+												borderColor: "var(--border-subtle)",
+												color: "var(--foreground)",
+											}}
+										/>
+									</div>
+								</div>
+							</section>
+
+							{/* Features */}
+							<section
+								className="rounded-lg border p-6"
+								style={{
+									backgroundColor: "var(--surface)",
+									borderColor: "var(--border-subtle)",
+								}}
+							>
+								<h2 className="mb-4 text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+									Features
+								</h2>
+
+								<div className="space-y-3">
+									<label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:opacity-80 transition"
+										style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
+										<input
+											type="checkbox"
+											name="rfidEnabled"
+											checked={formData.rfidEnabled}
+											onChange={handleInputChange}
+											className="w-4 h-4 rounded"
+										/>
+										<div>
+											<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+												RFID Scanning
+											</p>
+											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+												Enable RFID card scanning for attendance
+											</p>
+										</div>
+									</label>
+
+									<label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:opacity-80 transition"
+										style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
+										<input
+											type="checkbox"
+											name="faceRecognitionEnabled"
+											checked={formData.faceRecognitionEnabled}
+											onChange={handleInputChange}
+											className="w-4 h-4 rounded"
+										/>
+										<div>
+											<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+												Face Recognition
+											</p>
+											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+												Enable facial recognition for attendance verification
+											</p>
+										</div>
+									</label>
+
+									<label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:opacity-80 transition"
+										style={{ backgroundColor: "rgba(59, 130, 246, 0.05)" }}>
+										<input
+											type="checkbox"
+											name="geofencingEnabled"
+											checked={formData.geofencingEnabled}
+											onChange={handleInputChange}
+											className="w-4 h-4 rounded"
+										/>
+										<div>
+											<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+												Geofencing
+											</p>
+											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+												Enable location-based check-in restrictions
+											</p>
+										</div>
+									</label>
+								</div>
+							</section>
+
+							{/* Submit Button */}
+							<div className="flex gap-3">
+								<button
+									type="button"
+									onClick={() => router.back()}
+									className="flex-1 rounded-lg px-6 py-3 font-semibold text-sm transition hover:opacity-90"
+									style={{
+										backgroundColor: "var(--surface)",
+										borderColor: "var(--border-subtle)",
+										border: "1px solid",
+										color: "var(--foreground)",
+									}}
+								>
+									Cancel
+								</button>
+								<button
+									type="submit"
+									disabled={isLoading}
+									className="flex-1 rounded-lg px-6 py-3 font-semibold text-sm transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+									style={{
+										backgroundColor: "#3b82f6",
+										color: "white",
+									}}
+								>
+									{isLoading ? "Creating..." : "Create Event"}
+								</button>
+							</div>
+						</form>
+					</div>
+				</main>
+			</div>
+		</div>
+	);
+}

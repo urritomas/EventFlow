@@ -83,6 +83,14 @@ function StatusBadge({ category }) {
 				icon: AlertTriangle,
 			};
 			break;
+		case "Not Yet Scaled":
+			badgeColor = {
+				bg: "rgba(107, 114, 128, 0.1)",
+				text: "#6b7280",
+				border: "#6b7280",
+				icon: Info,
+			};
+			break;
 		default:
 			badgeColor = {
 				bg: "rgba(107, 114, 128, 0.1)",
@@ -269,9 +277,9 @@ export default function BehaviorAnalyticsCard({ participantId }) {
 			<div className="mb-6">
 				<div className="flex items-center justify-between mb-4">
 					<h3 style={{ color: "var(--foreground)" }} className="text-lg font-semibold">
-						Behavior Analytics
+						Performance Analytics
 					</h3>
-					<Tooltip text="Your behavior classification is based on attendance rate, punctuality, and consistency." />
+					<Tooltip text="Your attendance classification is based on attendance rate, punctuality, and consistency." />
 				</div>
 
 				{/* Status Badge */}

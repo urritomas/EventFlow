@@ -1,6 +1,6 @@
 import { createClient as createServerClient } from "@/utils/supabase/server";
 
-export type BehaviorCategory = "Regular" | "Late" | "Irregular" | "High-Risk" | "New Member";
+export type BehaviorCategory = "Regular" | "Late" | "Irregular" | "High-Risk" | "New Member" | "Not Yet Scaled";
 
 export interface BehaviorMetrics {
 	totalEventsRegistered: number;
@@ -154,8 +154,20 @@ function classifyBehavior(metrics: BehaviorMetrics): {
 	let explanation: string;
 	let recommendations: string[] = [];
 
+	// Not yet scaled: No events registered or attended
+	if (totalEventsRegistered === 0 && totalEventsAttended === 0) {
+		category = "Not Yet Scaled";
+		riskLevel = "Low";
+		explanation = "No attendance history yet. Register for events to start tracking your attendance patterns.";
+		recommendations = [
+			"Browse available events",
+			"Register for an upcoming event",
+			"Attend your first event",
+			"Build your attendance record",
+		];
+	}
 	// New member: Just registered, no attendance yet
-	if (totalEventsRegistered > 0 && totalEventsAttended === 0 && attendanceRate === 0) {
+	else if (totalEventsRegistered > 0 && totalEventsAttended === 0 && attendanceRate === 0) {
 		category = "New Member";
 		riskLevel = "Low";
 		explanation = `Participant just joined and is registered for ${totalEventsRegistered} event(s). Ready for their first attendance.`;

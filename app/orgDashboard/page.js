@@ -8,7 +8,6 @@ import {
 	BarChart3,
 	Users,
 	Calendar,
-	MapPin,
 	TrendingUp,
 	LogOut,
 	Menu,
@@ -16,15 +15,21 @@ import {
 	Check,
 	AlertCircle,
 	Download,
+	Plus,
+	Clock,
+	MapPin,
+	LogIn,
+	LogOut as LogOutIcon,
+	ChevronRight,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
+	const router = useRouter();
 	const menuItems = [
-		{ label: "Dashboard", icon: BarChart3, href: "#dashboard" },
+		{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
+		{ label: "Create Event", icon: Plus, href: "/orgDashboard/create-event" },
 		{ label: "Active Events", icon: Calendar, href: "#events" },
 		{ label: "Participants", icon: Users, href: "#participants" },
-		{ label: "Attendance", icon: MapPin, href: "#attendance" },
-		{ label: "Certificates", icon: Check, href: "#certificates" },
 		{ label: "Analytics", icon: TrendingUp, href: "#analytics" },
 	];
 
@@ -69,26 +74,30 @@ function Sidebar({ isOpen, onClose, onLogout }) {
 
 					<nav className="flex-1 overflow-y-auto px-4 py-6">
 						{menuItems.map((item) => {
-							const Icon = item.icon;
+							const Icon = typeof item.icon === "string" ? null : item.icon;
 							return (
-								<a
+								<button
 									key={item.label}
-									href={item.href}
-									onClick={onClose}
-									className="mb-1 flex items-center gap-3 rounded-lg px-4 py-2.5 transition-all hover:bg-opacity-30"
+									onClick={() => {
+										onClose();
+										if (item.href !== "#events" && item.href !== "#participants" && item.href !== "#analytics") {
+											router.push(item.href);
+										}
+									}}
+									className="mb-1 w-full flex items-center gap-3 rounded-lg px-4 py-2.5 transition-all hover:bg-opacity-30 text-left border-none bg-transparent cursor-pointer"
 									style={{
 										backgroundColor: "rgba(59, 130, 246, 0.1)",
 										color: "var(--foreground)",
 									}}
 								>
-									<Icon size={18} style={{ color: "#3b82f6" }} />
+									{Icon ? <Icon size={18} style={{ color: "#3b82f6" }} /> : <span className="text-lg">{item.icon}</span>}
 									<span className="text-sm font-medium">{item.label}</span>
-								</a>
+								</button>
 							);
 						})}
 					</nav>
 
-					<div className="border-t border-white/10 px-4 py-4">
+				<div className="border-t border-white/10 px-4 py-4">
 						<button
 							onClick={onLogout}
 							className="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 transition-all hover:bg-opacity-80 text-sm font-medium"
@@ -159,6 +168,9 @@ export default function OrgDashboard() {
 	const [participants, setParticipants] = useState([]);
 	const [certificates, setCertificates] = useState([]);
 	const [stats, setStats] = useState({ activeEvents: 0, totalParticipants: 0, avgAttendance: 0, verifiedUsers: 0 });
+	const [myEvents, setMyEvents] = useState([]);
+	const [selectedEvent, setSelectedEvent] = useState(null);
+	const [showModal, setShowModal] = useState(false);
 
 	useEffect(() => {
 		const fetchData = async () => {
@@ -166,18 +178,28 @@ export default function OrgDashboard() {
 			const userRole = localStorage.getItem("userRole");
 
 			if (userRole === "organization") {
+			// Fetch all organization events
+			const { data: createdEvents, error: eventsError } = await supabase
+				.from("events")
+				.select("*")
+
+				if (eventsError) {
+					console.error("Error fetching events:", eventsError);
+				} else if (createdEvents) {
+					console.log("Fetched created events:", createdEvents);
+					setMyEvents(createdEvents);
+				}
+
 				// Fetch organization events
-				const { data: events } = await supabase
+				const { data: events, error: activeError } = await supabase
 					.from("events")
 					.select("*")
 					.eq("is_active", true)
 					.eq("is_accepted", true);
 
-				const { data: attendanceData } = await supabase
-					.from("attendance")
-					.select("*, participants(*)");
-
-				if (events) {
+				if (activeError) {
+					console.error("Error fetching active events:", activeError);
+				} else if (events) {
 					const eventList = events.slice(0, 2).map(e => ({
 						id: e.event_id,
 						name: e.event_name,
@@ -189,7 +211,13 @@ export default function OrgDashboard() {
 					setStats(prev => ({ ...prev, activeEvents: events.length }));
 				}
 
-				if (attendanceData) {
+				const { data: attendanceData, error: attendanceError } = await supabase
+				.from("attendance_logs")
+					.select("*, participants(*)");
+
+				if (attendanceError) {
+					console.error("Error fetching attendance:", attendanceError);
+				} else if (attendanceData) {
 					const participantList = attendanceData.slice(0, 5).map(a => ({
 						id: a.participant_id,
 						name: a.participants?.name || "Participant",
@@ -350,7 +378,307 @@ export default function OrgDashboard() {
 							</div>
 						</section>
 
-						{/* Participant Management */}
+						{/* My Created Events */}
+						<section id="my-events" className="space-y-4">
+							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
+								My Created Events
+							</h2>
+							{myEvents.length === 0 ? (
+								<div
+									className="rounded-lg border p-8 text-center"
+									style={{
+										backgroundColor: "var(--surface)",
+										borderColor: "var(--border-subtle)",
+									}}
+								>
+									<Calendar size={32} className="mx-auto mb-3 opacity-50" style={{ color: "var(--text-muted)" }} />
+									<p style={{ color: "var(--text-muted)" }}>No events created yet</p>
+									<button
+										onClick={() => router.push("/orgDashboard/create-event")}
+										className="mt-4 rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+										style={{
+											backgroundColor: "#3b82f6",
+											color: "white",
+										}}
+									>
+										Create Your First Event
+									</button>
+								</div>
+							) : (
+								<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+									{myEvents.map((event) => (
+										<button
+											key={event.event_id}
+											onClick={() => {
+												setSelectedEvent(event);
+												setShowModal(true);
+											}}
+											className="rounded-lg border p-5 text-left transition hover:opacity-80 cursor-pointer"
+											style={{
+												backgroundColor: "var(--surface)",
+												borderColor: "var(--border-subtle)",
+											}}
+										>
+											<div className="flex items-start justify-between">
+												<div className="flex-1">
+													<h3 className="font-semibold" style={{ color: "var(--foreground)" }}>
+														{event.event_name}
+													</h3>
+													<p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+														{event.event_type}
+													</p>
+												</div>
+												<span
+													className="rounded-full px-2.5 py-1 text-xs font-semibold"
+													style={{
+														backgroundColor: event.is_accepted
+															? "rgba(16, 185, 129, 0.15)"
+															: event.is_active
+															? "rgba(59, 130, 246, 0.15)"
+															: "rgba(107, 114, 128, 0.15)",
+														color: event.is_accepted
+															? "#10b981"
+															: event.is_active
+															? "#3b82f6"
+															: "#6b7280",
+													}}
+												>
+													{event.is_accepted ? "Approved" : event.is_active ? "Active" : "Pending"}
+												</span>
+											</div>
+
+											<div className="mt-4 space-y-2 text-sm">
+												<div className="flex items-center gap-2">
+													<Clock size={14} style={{ color: "var(--text-muted)" }} />
+													<span style={{ color: "var(--text-muted)" }}>
+														{new Date(event.event_date).toLocaleDateString()} {event.start_time}
+													</span>
+												</div>
+												<div className="flex items-center gap-2">
+													<MapPin size={14} style={{ color: "var(--text-muted)" }} />
+													<span style={{ color: "var(--text-muted)" }}>{event.venue_name}</span>
+												</div>
+												<div className="flex items-center gap-2">
+													<Users size={14} style={{ color: "var(--text-muted)" }} />
+													<span style={{ color: "var(--text-muted)" }}>
+														Expected: {event.expected_attendance} participants
+													</span>
+												</div>
+											</div>
+
+											<div className="mt-4 flex items-center justify-between">
+												<span className="text-xs" style={{ color: "var(--text-muted)" }}>
+													Click to manage
+												</span>
+												<ChevronRight size={16} style={{ color: "var(--text-muted)" }} />
+											</div>
+										</button>
+									))}
+								</div>
+							)}
+						</section>
+
+						{/* Modal Overlay */}
+						{showModal && selectedEvent && (
+							<div
+								className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+								onClick={() => setShowModal(false)}
+							>
+								<div
+									className="rounded-lg border max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+									style={{
+										backgroundColor: "var(--surface)",
+										borderColor: "var(--border-subtle)",
+									}}
+									onClick={(e) => e.stopPropagation()}
+								>
+									{/* Modal Header */}
+									<div
+										className="sticky top-0 flex items-center justify-between border-b p-6"
+										style={{
+											backgroundColor: "var(--surface)",
+											borderColor: "var(--border-subtle)",
+										}}
+									>
+										<h2 className="text-xl font-bold" style={{ color: "var(--foreground)" }}>
+											{selectedEvent.event_name}
+										</h2>
+										<button
+											onClick={() => setShowModal(false)}
+											className="rounded-lg p-1 transition hover:opacity-70"
+											style={{ backgroundColor: "var(--surface-soft)" }}
+										>
+											<X size={20} style={{ color: "var(--foreground)" }} />
+										</button>
+									</div>
+
+									{/* Modal Content */}
+									<div className="p-6 space-y-6">
+										{/* Event Details */}
+										<div className="space-y-3">
+											<h3 className="font-semibold" style={{ color: "var(--foreground)" }}>
+												Event Details
+											</h3>
+											<div className="grid gap-4 md:grid-cols-2">
+												<div>
+													<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+														Type
+													</p>
+													<p className="font-medium" style={{ color: "var(--foreground)" }}>
+														{selectedEvent.event_type}
+													</p>
+												</div>
+												<div>
+													<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+														Date
+													</p>
+													<p className="font-medium" style={{ color: "var(--foreground)" }}>
+														{new Date(selectedEvent.event_date).toLocaleDateString()}
+													</p>
+												</div>
+												<div>
+													<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+														Time
+													</p>
+													<p className="font-medium" style={{ color: "var(--foreground)" }}>
+														{selectedEvent.start_time} - {selectedEvent.end_time}
+													</p>
+												</div>
+												<div>
+													<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+														Expected Attendance
+													</p>
+													<p className="font-medium" style={{ color: "var(--foreground)" }}>
+														{selectedEvent.expected_attendance} people
+													</p>
+												</div>
+											</div>
+											<div>
+												<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+													Venue
+												</p>
+												<p className="font-medium" style={{ color: "var(--foreground)" }}>
+													{selectedEvent.venue_name}
+												</p>
+												<p className="text-sm" style={{ color: "var(--text-muted)" }}>
+													{selectedEvent.full_address}
+												</p>
+											</div>
+										</div>
+
+										{/* Features */}
+										<div>
+											<h3 className="font-semibold mb-3" style={{ color: "var(--foreground)" }}>
+												Enabled Features
+											</h3>
+											<div className="space-y-2">
+												{selectedEvent.rfid_enabled && (
+													<div className="flex items-center gap-2">
+														<Check size={16} style={{ color: "#10b981" }} />
+														<span style={{ color: "var(--foreground)" }}>RFID Scanner</span>
+													</div>
+												)}
+												{selectedEvent.face_recognition_enabled && (
+													<div className="flex items-center gap-2">
+														<Check size={16} style={{ color: "#10b981" }} />
+														<span style={{ color: "var(--foreground)" }}>Face Recognition</span>
+													</div>
+												)}
+												{selectedEvent.geofencing_enabled && (
+													<div className="flex items-center gap-2">
+														<Check size={16} style={{ color: "#10b981" }} />
+														<span style={{ color: "var(--foreground)" }}>Geofencing</span>
+													</div>
+												)}
+											</div>
+										</div>
+
+										{/* Status */}
+										<div>
+											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+												Status
+											</p>
+											<div className="flex items-center gap-2 mt-2">
+												<span
+													className="rounded-full px-3 py-1 text-sm font-semibold"
+													style={{
+														backgroundColor: selectedEvent.is_accepted
+															? "rgba(16, 185, 129, 0.15)"
+															: selectedEvent.is_active
+															? "rgba(59, 130, 246, 0.15)"
+															: "rgba(107, 114, 128, 0.15)",
+														color: selectedEvent.is_accepted
+															? "#10b981"
+															: selectedEvent.is_active
+															? "#3b82f6"
+															: "#6b7280",
+													}}
+												>
+													{selectedEvent.is_accepted
+														? "Approved"
+														: selectedEvent.is_active
+														? "Active"
+														: "Pending Approval"}
+												</span>
+											</div>
+										</div>
+
+										{/* Action Buttons */}
+										<div className="space-y-3 border-t pt-6" style={{ borderColor: "var(--border-subtle)" }}>
+											<h3 className="font-semibold" style={{ color: "var(--foreground)" }}>
+												Attendance Management
+											</h3>
+											<div className="grid gap-3 sm:grid-cols-2">
+												<button
+													onClick={() => {
+														router.push(`/orgDashboard/event/${selectedEvent.event_id}`);
+														setShowModal(false);
+													}}
+													className="flex items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition hover:opacity-90"
+													style={{
+														backgroundColor: "#3b82f6",
+														color: "white",
+													}}
+												>
+													<LogIn size={18} />
+													Check In
+												</button>
+												<button
+													onClick={() => {
+														// Open checkout scanner
+														router.push(`/orgDashboard/event/${selectedEvent.event_id}?mode=checkout`);
+														setShowModal(false);
+													}}
+													className="flex items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition hover:opacity-90"
+													style={{
+														backgroundColor: "#f97316",
+														color: "white",
+													}}
+												>
+													<LogOutIcon size={18} />
+													Check Out
+												</button>
+											</div>
+											<button
+												onClick={() => {
+													router.push(`/orgDashboard/event/${selectedEvent.event_id}/analytics`);
+													setShowModal(false);
+												}}
+												className="w-full rounded-lg px-4 py-3 font-semibold transition hover:opacity-90"
+												style={{
+													backgroundColor: "rgba(16, 185, 129, 0.15)",
+													color: "#10b981",
+												}}
+											>
+												View Analytics
+											</button>
+										</div>
+									</div>
+								</div>
+							</div>
+						)}
+
+						
 						<section id="participants" className="space-y-4">
 							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
 								Participant Management

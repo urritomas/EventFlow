@@ -28,7 +28,7 @@ import {
 function Sidebar({ isOpen, onClose, onLogout }) {
 	const menuItems = [
 		{ label: "Dashboard", icon: BarChart3, href: "#dashboard" },
-		{ label: "Behavior Analytics", icon: TrendingUp, href: "#behavior" },
+		{ label: "Performance Analytics", icon: TrendingUp, href: "#behavior" },
 		{ label: "Profile", icon: User, href: "#profile" },
 		{ label: "Events", icon: Search, href: "#events" },
 		{ label: "Attendance", icon: Smartphone, href: "#attendance" },
@@ -823,10 +823,10 @@ export default function PersonalDashboard() {
 							</div>
 						</section>
 
-						{/* Behavior Analytics */}
+						{/* Performance Analytics */}
 						<section id="behavior" className="space-y-4">
 							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
-								Behavior & Performance
+								Performance
 							</h2>
 							{participantId ? (
 								<BehaviorAnalyticsCard participantId={participantId} />
@@ -840,10 +840,10 @@ export default function PersonalDashboard() {
 								>
 									<div className="text-center">
 										<p style={{ color: "var(--text-muted)" }} className="text-sm mb-2">
-											Behavior Analytics Not Available
+											Performance Analytics Not Available
 										</p>
 										<p style={{ color: "var(--text-muted)" }} className="text-xs">
-											Your behavior analytics will be available once your profile is linked to event records. Start attending events to see your behavior classification.
+											Your performance analytics will be available once your profile is linked to event records. Start attending events to see your performance classification.
 										</p>
 									</div>
 								</div>
