@@ -503,7 +503,7 @@ export default function HiringDetailsPage() {
 
 							<div className="flex flex-col gap-3 sm:flex-row">
 								<Button type="submit" disabled={isSubmitting}>
-									{isSubmitting ? "Submitting..." : "Request a proposal"}
+									{isSubmitting ? "Submitting..." : "Register Event"}
 								</Button>
 							</div>
 						</form>

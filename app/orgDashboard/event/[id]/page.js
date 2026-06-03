@@ -211,17 +211,18 @@ export default function EventDetailsPage() {
 		if (e.key === "Enter" && value) {
 			try {
 				const supabase = createClient();
-				// Find participant by RFID
-				const { data: participant } = await supabase
-					.from("participants")
-					.select("*")
-					.eq("rfid_code", value)
+				const { data: registration } = await supabase
+					.from("event_participants")
+					.select("*, participants(*)")
+					.eq("reg_rfid", value)
+					.eq("event_id", eventId)
 					.single();
+
+				const participant = registration?.participants || null;
 
 				if (participant) {
 					if (mode === "checkout") {
-						// Update existing attendance with checkout info
-						const { data: existingAttendance, error: fetchError } = await supabase
+						const { data: existingAttendance } = await supabase
 							.from("attendance")
 							.select("*")
 							.eq("event_id", eventId)
@@ -243,7 +244,6 @@ export default function EventDetailsPage() {
 								setScanResult({ success: true, message: `${participant.name} checked out!` });
 								if (rfidInput.current) rfidInput.current.value = "";
 								setTimeout(() => setScanResult(null), 3000);
-								// Refresh attendees
 								const { data: newAttendees } = await supabase
 									.from("attendance")
 									.select("*, participants(*)")
@@ -258,22 +258,19 @@ export default function EventDetailsPage() {
 							setTimeout(() => setScanResult(null), 3000);
 						}
 					} else {
-						// Check-in mode
-						// Record attendance
 						const { error } = await supabase.from("attendance").insert({
 							event_id: eventId,
 							participant_id: participant.participant_id,
 							check_in_time: new Date().toISOString(),
-							verified: true,
-							verified_at: new Date().toISOString(),
+							verified: false,
 							verification_method: "rfid",
+							source_rfid: value,
 						});
 
 						if (!error) {
-							setScanResult({ success: true, message: `Welcome, ${participant.name}!` });
+							setScanResult({ success: true, message: `RFID recognized — ${participant.name} marked Partially Checked In` });
 							if (rfidInput.current) rfidInput.current.value = "";
 							setTimeout(() => setScanResult(null), 3000);
-							// Refresh attendees
 							const { data: newAttendees } = await supabase
 								.from("attendance")
 								.select("*, participants(*)")
@@ -282,7 +279,7 @@ export default function EventDetailsPage() {
 						}
 					}
 				} else {
-					setScanResult({ success: false, message: "RFID not recognized" });
+					setScanResult({ success: false, message: "RFID not recognized for this event" });
 					setTimeout(() => setScanResult(null), 3000);
 				}
 			} catch (error) {
@@ -777,18 +774,40 @@ export default function EventDetailsPage() {
 															: "-"}
 													</td>
 													<td className="px-6 py-4">
-														<span
-															className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs"
-															style={{
-																backgroundColor: attendee.verified
-																	? "rgba(16, 185, 129, 0.1)"
-																	: "rgba(239, 68, 68, 0.1)",
-																color: attendee.verified ? "#10b981" : "#ef4444",
-															}}
-														>
-															{attendee.verified ? <Check size={12} /> : <X size={12} />}
-															{attendee.verified ? "Verified" : "Pending"}
-														</span>
+														{attendee.check_in_time && !attendee.verified ? (
+															<span
+																className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs"
+																style={{
+																	backgroundColor: "rgba(245, 158, 11, 0.1)",
+																	color: "#f59e0b",
+																}}
+															>
+																<AlertCircle size={12} />
+																Partially Checked In
+															</span>
+														) : attendee.verified ? (
+															<span
+																className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs"
+																style={{
+																	backgroundColor: "rgba(16, 185, 129, 0.1)",
+																	color: "#10b981",
+																}}
+															>
+																<Check size={12} />
+																Verified
+															</span>
+														) : (
+															<span
+																className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs"
+																style={{
+																	backgroundColor: "rgba(239, 68, 68, 0.1)",
+																	color: "#ef4444",
+																}}
+															>
+																<X size={12} />
+																Pending
+															</span>
+														)}
 													</td>
 												</tr>
 											))}

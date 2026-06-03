@@ -243,13 +243,13 @@ export default function PersonalDashboard() {
 							const fullName = firstName && lastName ? `${firstName} ${lastName}` : "User";
 							const { data: newParticipant, error: insertError } = await supabase
 								.from("participants")
-								.insert({
-									name: fullName,
-									email: email,
-									student_id: email, // Use email as student_id
-									phone: null,
-									rfid_code: null
-								})
+							.insert({
+								name: fullName,
+								email: email,
+								student_id: email,
+								phone: null,
+								reg_rfid: null
+							})
 								.select("participant_id");
 							
 							if (newParticipant && newParticipant.length > 0) {
@@ -398,114 +398,115 @@ export default function PersonalDashboard() {
 		}
 	};
 
-	const handleSetRFIDCard = async () => {
-		if (!participantId) {
-			setRfidMessage("Error: Participant profile not loaded");
-			return;
-		}
+  const handleSetRFIDCard = async () => {
+    if (!participantId) {
+      setRfidMessage("Error: Participant profile not loaded");
+      return;
+    }
 
-		if (!newRFIDCode.trim()) {
-			setRfidMessage("Please enter your RFID code");
-			return;
-		}
+    if (!newRFIDCode.trim()) {
+      setRfidMessage("Please enter your RFID code");
+      return;
+    }
 
-		setIsSettingRFID(true);
-		setRfidMessage("");
+    setIsSettingRFID(true);
+    setRfidMessage("");
 
-		try {
-			const supabase = createClient();
-			const { error } = await supabase
-				.from("participants")
-				.update({ rfid_code: newRFIDCode })
-				.eq("participant_id", participantId);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("event_participants")
+        .update({ reg_rfid: newRFIDCode })
+        .eq("participant_id", participantId);
 
-			if (error) {
-				console.error("RFID save error:", error);
-				setRfidMessage("Error saving RFID: " + error.message);
-			} else {
-				setRegisteredRFID(newRFIDCode);
-				setNewRFIDCode("");
-				setRfidMessage("✓ RFID card registered successfully!");
-				setTimeout(() => setRfidMessage(""), 3000);
-			}
-		} catch (error) {
-			console.error("RFID registration error:", error);
-			setRfidMessage("Error: " + error.message);
-		} finally {
-			setIsSettingRFID(false);
-		}
-	};
+      if (error) {
+        console.error("RFID save error:", error);
+        setRfidMessage("Error saving RFID: " + error.message);
+      } else {
+        setRegisteredRFID(newRFIDCode);
+        setNewRFIDCode("");
+        setRfidMessage("✓ RFID card registered successfully!");
+        setTimeout(() => setRfidMessage(""), 3000);
+      }
+    } catch (error) {
+      console.error("RFID registration error:", error);
+      setRfidMessage("Error: " + error.message);
+    } finally {
+      setIsSettingRFID(false);
+    }
+  };
 
-	const handleRemoveRFID = async () => {
-		if (!participantId) return;
+  const handleRemoveRFID = async () => {
+    if (!participantId) return;
 
-		setIsSettingRFID(true);
-		setRfidMessage("");
+    setIsSettingRFID(true);
+    setRfidMessage("");
 
-		try {
-			const supabase = createClient();
-			const { error } = await supabase
-				.from("participants")
-				.update({ rfid_code: null })
-				.eq("participant_id", participantId);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("event_participants")
+        .update({ reg_rfid: null })
+        .eq("participant_id", participantId);
 
-			if (error) {
-				console.error("RFID remove error:", error);
-				setRfidMessage("Error removing RFID: " + error.message);
-			} else {
-				setRegisteredRFID(null);
-				setNewRFIDCode("");
-				setRfidMessage("✓ RFID card removed successfully!");
-				setTimeout(() => setRfidMessage(""), 3000);
-			}
-		} catch (error) {
-			console.error("RFID remove error:", error);
-			setRfidMessage("Error: " + error.message);
-		} finally {
-			setIsSettingRFID(false);
-		}
-	};
+      if (error) {
+        console.error("RFID remove error:", error);
+        setRfidMessage("Error removing RFID: " + error.message);
+      } else {
+        setRegisteredRFID(null);
+        setNewRFIDCode("");
+        setRfidMessage("✓ RFID card removed successfully!");
+        setTimeout(() => setRfidMessage(""), 3000);
+      }
+    } catch (error) {
+      console.error("RFID remove error:", error);
+      setRfidMessage("Error: " + error.message);
+    } finally {
+      setIsSettingRFID(false);
+    }
+  };
 
-	const handleRFIDSubmit = async () => {
-		if (!participantId) {
-			setRegistrationMessage("Error: Participant profile not loaded");
-			return;
-		}
+  const handleRFIDSubmit = async () => {
+    if (!participantId) {
+      setRegistrationMessage("Error: Participant profile not loaded");
+      return;
+    }
 
-		if (!rfidCode.trim()) {
-			setRegistrationMessage("Please enter your RFID code");
-			return;
-		}
+    if (!rfidCode.trim()) {
+      setRegistrationMessage("Please enter your RFID code");
+      return;
+    }
 
-		setIsRegistering(true);
+    setIsRegistering(true);
 
-		try {
-			const supabase = createClient();
-			const { error } = await supabase
-				.from("participants")
-				.update({ rfid_code: rfidCode })
-				.eq("participant_id", participantId);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("event_participants")
+        .update({ reg_rfid: rfidCode })
+        .eq("event_id", selectedEvent.event_id)
+        .eq("participant_id", participantId);
 
-			if (error) {
-				console.error("RFID save error:", error);
-				setRegistrationMessage("Error saving RFID: " + error.message);
-			} else {
-				setRegistrationMessage("✓ RFID registered successfully! Event registration complete.");
-				setTimeout(() => {
-					setSelectedEvent(null);
-					setShowRFIDStep(false);
-					setRfidCode("");
-				}, 2000);
-			}
-		} catch (error) {
-			console.error("Catch error:", error);
-			setRegistrationMessage("Error: " + error.message);
-		} finally {
-			setIsRegistering(false);
-		}
-	};
+      if (error) {
+        console.error("RFID save error:", error);
+        setRegistrationMessage("Error saving RFID: " + error.message);
+      } else {
+        setRegistrationMessage("✓ RFID registered successfully! Event registration complete.");
+        setTimeout(() => {
+          setSelectedEvent(null);
+          setShowRFIDStep(false);
+          setRfidCode("");
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Catch error:", error);
+      setRegistrationMessage("Error: " + error.message);
+    } finally {
+      setIsRegistering(false);
+    }
+  };
 
-	useEffect(() => {
+  useEffect(() => {
 		const fetchData = async () => {
 			const supabase = createClient();
 			const userRole = localStorage.getItem("userRole");
@@ -684,13 +685,13 @@ export default function PersonalDashboard() {
 						const supabaseForRFID = createClient();
 						const { data: participantData } = await supabaseForRFID
 							.from("participants")
-							.select("rfid_code")
+							.select("reg_rfid")
 							.eq("email", email)
 							.single();
 						
-						if (participantData?.rfid_code) {
-							setRegisteredRFID(participantData.rfid_code);
-							console.log("Found registered RFID:", participantData.rfid_code);
+						if (participantData?.reg_rfid) {
+							setRegisteredRFID(participantData.reg_rfid);
+							console.log("Found registered RFID:", participantData.reg_rfid);
 						}
 					} else {
 						console.warn("No data returned from database");
