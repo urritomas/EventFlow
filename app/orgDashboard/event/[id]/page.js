@@ -140,6 +140,7 @@ export default function EventDetailsPage() {
 	const [scanResult, setScanResult] = useState(null);
 	const [checkedInFaceIds, setCheckedInFaceIds] = useState(new Set());
 	const [attendees, setAttendees] = useState([]);
+	const [registeredParticipants, setRegisteredParticipants] = useState([]);
 	const rfidInput = useRef(null);
 
 	useEffect(() => {
@@ -176,6 +177,16 @@ export default function EventDetailsPage() {
 
 				if (attendanceData) {
 					setAttendees(attendanceData);
+				}
+
+				// Fetch registered participants from event_participants joined with participants
+				const { data: participantsData } = await supabase
+					.from("event_participants")
+					.select("*, participants(participant_id, name, email)")
+					.eq("event_id", eventId);
+
+				if (participantsData) {
+					setRegisteredParticipants(participantsData);
 				}
 			} catch (error) {
 				console.error("Error fetching event:", error);
@@ -506,11 +517,15 @@ export default function EventDetailsPage() {
 									<Users size={20} style={{ color: "#3b82f6" }} />
 									<div>
 										<p className="text-xs" style={{ color: "var(--text-muted)" }}>
-											Attendees
+											Registered
 										</p>
-										<p className="font-semibold" style={{ color: "var(--foreground)" }}>
-											{attendees.length} / {eventData.expected_attendance}
-										</p>
+										<button
+											onClick={() => setActiveTab("registered")}
+											className="font-semibold hover:underline transition"
+											style={{ color: "var(--foreground)" }}
+										>
+											{registeredParticipants.length} / {eventData.expected_attendance}
+										</button>
 									</div>
 								</div>
 							</div>
@@ -521,7 +536,8 @@ export default function EventDetailsPage() {
 						{[
 							{ id: "overview", label: "Overview", icon: Calendar },
 							{ id: "unified-scanner", label: "Quick Scan", icon: Zap },
-							{ id: "attendance", label: "Attendees", icon: Users },
+							{ id: "registered", label: "Registered", icon: Users },
+							{ id: "attendance", label: "Attendees", icon: CheckCircle },
 							{ id: "analytics", label: "Analytics", icon: TrendingUp },
 						].map((tab) => (
 							<button
@@ -922,6 +938,104 @@ export default function EventDetailsPage() {
 										</p>
 									</div>
 								)}
+							</section>
+						)}
+
+						{/* Registered Tab */}
+						{activeTab === "registered" && (
+							<section
+								className="rounded-lg border overflow-hidden"
+								style={{
+									backgroundColor: "var(--surface)",
+									borderColor: "var(--border-subtle)",
+								}}
+							>
+								<div className="p-6 flex items-center justify-between border-b" style={{ borderColor: "var(--border-subtle)" }}>
+									<h2 className="text-lg font-semibold" style={{ color: "var(--foreground)" }}>
+										Registered Participants ({registeredParticipants.length})
+									</h2>
+									<button
+										onClick={() => {
+											const headers = ["Name", "Email", "Status"];
+											const rows = registeredParticipants.map((p) => [
+												p.participants?.name || "Unknown",
+												p.participants?.email || "N/A",
+												"Registered",
+											]);
+											const csvContent = [headers.join(","), ...rows.map((row) => row.map((cell) => `"${cell}"`).join(","))].join("\n");
+											const blob = new Blob([csvContent], { type: "text/csv" });
+											const url = window.URL.createObjectURL(blob);
+											const link = document.createElement("a");
+											link.href = url;
+											link.download = `${eventData?.event_name || "event"}_registered_${Date.now()}.csv`;
+											link.click();
+											window.URL.revokeObjectURL(url);
+										}}
+										className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+										style={{ backgroundColor: "#3b82f6" }}
+									>
+										<Download size={16} />
+										Download CSV
+									</button>
+								</div>
+								<div className="overflow-x-auto">
+									<table className="w-full text-sm">
+										<thead>
+											<tr style={{ backgroundColor: "var(--surface-soft)", borderColor: "var(--border-subtle)" }} className="border-b">
+												<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+													Name
+												</th>
+												<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+													Email
+												</th>
+												<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+													Status
+												</th>
+											</tr>
+										</thead>
+										<tbody>
+											{registeredParticipants.map((participant, idx) => (
+												<tr
+													key={participant.id || idx}
+													style={{
+														backgroundColor: "var(--surface)",
+														borderColor: "var(--border-subtle)",
+													}}
+													className={idx !== registeredParticipants.length - 1 ? "border-b" : ""}
+												>
+													<td className="px-6 py-4 font-medium" style={{ color: "var(--foreground)" }}>
+														{participant.participants?.name || "Unknown"}
+													</td>
+													<td className="px-6 py-4" style={{ color: "var(--text-muted)" }}>
+														{participant.participants?.email || "N/A"}
+													</td>
+													<td className="px-6 py-4">
+														<span
+															className="rounded-full px-2.5 py-1 text-xs font-semibold"
+															style={{
+																backgroundColor: "rgba(16, 185, 129, 0.15)",
+																color: "#10b981",
+															}}
+														>
+															Registered
+														</span>
+													</td>
+												</tr>
+											))}
+											{registeredParticipants.length === 0 && (
+												<tr>
+													<td
+														className="px-6 py-6 text-center text-sm"
+														style={{ color: "var(--text-muted)" }}
+														colSpan={3}
+													>
+														No registered participants found.
+													</td>
+												</tr>
+											)}
+										</tbody>
+									</table>
+								</div>
 							</section>
 						)}
 

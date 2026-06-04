@@ -167,6 +167,7 @@ export default function OrgDashboard() {
 	const [myEvents, setMyEvents] = useState([]);
 	const [selectedEvent, setSelectedEvent] = useState(null);
 	const [showModal, setShowModal] = useState(false);
+	const [attendanceStats, setAttendanceStats] = useState({ onPremise: 0, online: 0, geofenceActive: false });
 
 	useEffect(() => {
 		const fetchData = async () => {
@@ -191,11 +192,23 @@ export default function OrgDashboard() {
 				if (activeError) {
 					console.error("Error fetching active events:", activeError);
 				} else if (events) {
+					// Fetch actual registered counts from event_participants
+					const { data: allRegistrations } = await supabase
+						.from("event_participants")
+						.select("event_id");
+
+					const registrationCounts = {};
+					if (allRegistrations) {
+						allRegistrations.forEach((r) => {
+							registrationCounts[r.event_id] = (registrationCounts[r.event_id] || 0) + 1;
+						});
+					}
+
 					const eventList = events.slice(0, 2).map((e) => ({
 						id: e.event_id,
 						name: e.event_name,
-						capacity: e.expected_attendance,
-						registered: Math.floor(e.expected_attendance * 0.64),
+						capacity: e.expected_attendance || 0,
+						registered: registrationCounts[e.event_id] || 0,
 						date: e.event_date,
 					}));
 					setActiveEvents(eventList);
@@ -314,12 +327,12 @@ export default function OrgDashboard() {
 													className="h-full rounded-full transition-all"
 													style={{
 														backgroundColor: "#3b82f6",
-														width: `${(event.registered / event.capacity) * 100}%`,
+														width: event.capacity > 0 ? `${(event.registered / event.capacity) * 100}%` : "0%",
 													}}
 												/>
 											</div>
 											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
-												{Math.round((event.registered / event.capacity) * 100)}% registered
+												{event.capacity > 0 ? Math.round((event.registered / event.capacity) * 100) : 0}% registered
 											</p>
 										</div>
 									</div>

@@ -511,12 +511,10 @@ export default function PersonalDashboard() {
 			const userRole = localStorage.getItem("userRole");
 
 			if (userRole === "personal") {
-				// Fetch events data
+				// Fetch ALL events data from the events table
 				const { data: events } = await supabase
 					.from("events")
 					.select("*")
-					.eq("is_active", true)
-					.eq("is_accepted", true)
 					.order("event_date", { ascending: true });
 
 				const { data: attendance } = await supabase
