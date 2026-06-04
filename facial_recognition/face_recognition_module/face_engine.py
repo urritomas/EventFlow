@@ -123,7 +123,7 @@ class FaceEngine:
         Args:
             probe:   Normalized 512-D embedding from the live camera frame.
             gallery: List of participant dicts from DatabaseManager.get_all_participants().
-                     Each dict must contain 'embedding' (np.ndarray), 'name', 'student_id'.
+                     Each dict must contain 'embedding' (np.ndarray), 'name', 'rfid'.
 
         Returns:
             (best_match_dict, similarity_score)
@@ -154,8 +154,8 @@ class FaceEngine:
 
         if best_score >= self.threshold:
             logger.info(
-                "Match found: '%s' (student_id=%s, score=%.4f)",
-                best_match["name"], best_match["student_id"], best_score,
+                "Match found: '%s' (rfid=%s, score=%.4f)",
+                best_match["name"], best_match["rfid"], best_score,
             )
             return best_match, best_score
 

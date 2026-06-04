@@ -2,23 +2,24 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import SiteHeader from "../../components/SiteHeader";
-import { Camera, CheckCircle, ArrowLeft, AlertCircle, User, Hash, Mail } from "lucide-react";
+import { Camera, CheckCircle, ArrowLeft, AlertCircle, User, Mail } from "lucide-react";
+import { Suspense } from "react";
 import { createClient } from "@/utils/supabase/client";
 
-export default function RegisterFacePage() {
+function RegisterFacePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const eventIdFromUrl = searchParams.get("eventId");
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
   // ── Form fields ──────────────────────────────────────────────────────────────
-  const [name,          setName]          = useState("");
-  const [studentId,     setStudentId]     = useState("");
-  const [email,         setEmail]         = useState("");
-  const [selectedEvent, setSelectedEvent] = useState("");
-  const [events,        setEvents]        = useState([]);
-  const [eventsLoading, setEventsLoading] = useState(true);
+  const [rfid, setRfid] = useState("");
+  const [name,  setName]  = useState("");
+  const [email, setEmail] = useState("");
 
   // ── Camera / capture state ───────────────────────────────────────────────────
   const [isSubmitting,  setIsSubmitting]  = useState(false);
@@ -27,6 +28,17 @@ export default function RegisterFacePage() {
   const [capturedImage, setCapturedImage] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage,  setErrorMessage]  = useState("");
+  const [isReenrolling, setIsReenrolling] = useState(false);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
+
+  // ── Check if user already registered ──────────────────────────────────────────
+  useEffect(() => {
+    if (!eventIdFromUrl) return;
+    const key = `faceRegistered_event_${eventIdFromUrl}`;
+    const registered = window.localStorage.getItem(key) === "true";
+    setAlreadyRegistered(registered);
+    console.log("eventIdFromUrl:", eventIdFromUrl);
+  }, [eventIdFromUrl]);
 
   // ── Auto-start camera on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -51,33 +63,7 @@ export default function RegisterFacePage() {
     };
   }, []);
 
-  // ── Fetch active events ───────────────────────────────────────────────────────
-  useEffect(() => {
-    const fetchEvents = async () => {
-      setEventsLoading(true);
-      try {
-        const supabase = createClient();
-        const { data, error } = await supabase
-          .from("events")
-          .select("event_id, event_name")
-          .order("event_date", { ascending: true });
 
-        if (error) throw error;
-        const list = (data || []).map((e) => ({
-          event_id:   e.event_id,
-          event_name: e.event_name,
-        }));
-        setEvents(list);
-        if (list.length > 0) setSelectedEvent(String(list[0].event_id));
-      } catch (err) {
-        console.error("Error fetching events:", err);
-        setEvents([]);
-      } finally {
-        setEventsLoading(false);
-      }
-    };
-    fetchEvents();
-  }, []);
 
   // ── Capture frame ─────────────────────────────────────────────────────────────
   const captureFrame = () => {
@@ -94,34 +80,45 @@ export default function RegisterFacePage() {
 
   // ── Submit ────────────────────────────────────────────────────────────────────
   const handleRegisterFace = async () => {
-    if (!name.trim())      return setErrorMessage("Please enter your full name.");
-    if (!studentId.trim()) return setErrorMessage("Please enter your student ID.");
-    if (!email.trim())     return setErrorMessage("Please enter your email address.");
-    if (!selectedEvent)    return setErrorMessage("No active event found.");
-    if (!capturedImage)    return setErrorMessage("Please capture your face first.");
+    if (!name.trim())        return setErrorMessage("Please enter your full name.");
+    if (!email.trim())       return setErrorMessage("Please enter your email address.");
+    if (!rfid.trim())        return setErrorMessage("Please enter your RFID.");
+    if (!capturedImage)      return setErrorMessage("Please capture your face first.");
+    if (!eventIdFromUrl)     return setErrorMessage("No event selected. Please register for an event first.");
 
     setIsSubmitting(true);
     setStatusMessage("Processing your face…");
     setErrorMessage("");
+
+    if (!rfid.trim()) return setErrorMessage("Please enter your RFID.");
 
     try {
       const response = await fetch("/api/register-face", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name:      name.trim(),
-          studentId: studentId.trim(),
-          email:     email.trim(),
-          eventId:   selectedEvent,
-          image:     capturedImage,
+          name:  name.trim(),
+          email: email.trim(),
+          rfid:  rfid.trim(),
+          eventId:   eventIdFromUrl,
+          image: capturedImage,
         }),
       });
 
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.error || "Failed to register face.");
+      if (!response.ok) {
+        // Check if already registered error (409)
+        if (response.status === 409) {
+          setErrorMessage(data.error || "Already registered");
+          setAlreadyRegistered(true);
+          setIsSubmitting(false);
+          return;
+        }
+        throw new Error(data.error || "Failed to register face.");
+      }
 
-      window.localStorage.setItem("faceRegistered", "true");
+      window.localStorage.setItem(`faceRegistered_event_${eventIdFromUrl}`, "true");
       setStatusMessage(`✓ ${data.message || "Face registered successfully!"} Redirecting…`);
       streamRef.current?.getTracks().forEach((t) => t.stop());
       setTimeout(() => router.push("/personalDashboard"), 2000);
@@ -129,6 +126,45 @@ export default function RegisterFacePage() {
     } catch (err) {
       setErrorMessage(err.message || "Failed to register face. Please try again.");
       setIsSubmitting(false);
+      setStatusMessage("");
+    }
+  };
+
+  // ── Re-enroll handler ────────────────────────────────────────────────────────
+  const handleReenrollFace = async () => {
+    console.log("Re-enroll eventIdFromUrl:", eventIdFromUrl);
+    console.log("Re-enroll rfid:", rfid); 
+    if (!rfid.trim())    return setErrorMessage("Please enter your RFID.");
+    if (!capturedImage)  return setErrorMessage("Please capture your face first.");
+
+    setIsReenrolling(true);
+    setStatusMessage("Updating your face…");
+    setErrorMessage("");
+
+    try {
+      const response = await fetch("/api/re-enroll-face", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rfid:  rfid.trim(),
+          eventId:   eventIdFromUrl,
+          image: capturedImage,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to re-enroll face.");
+      }
+
+      setStatusMessage(`✓ ${data.message || "Face updated successfully!"} Redirecting…`);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      setTimeout(() => router.push("/personalDashboard"), 2000);
+
+    } catch (err) {
+      setErrorMessage(err.message || "Failed to re-enroll face. Please try again.");
+      setIsReenrolling(false);
       setStatusMessage("");
     }
   };
@@ -154,12 +190,34 @@ export default function RegisterFacePage() {
               <Camera size={24} />
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-slate-100">Face ID Registration</h1>
+              <h1 className="text-2xl font-semibold text-slate-100">
+                {alreadyRegistered ? "Update Face ID" : "Face ID Registration"}
+              </h1>
               <p className="mt-1 text-sm text-slate-400">
-                Fill in your details and capture your face to register.
+                {alreadyRegistered
+                  ? "Capture your face to update your registration."
+                  : "Fill in your details and capture your face to register."}
               </p>
             </div>
           </div>
+
+          {/* ── Event indicator ── */}
+          
+          {eventIdFromUrl ? (
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+              <p className="text-xs text-slate-400">
+                Registering face for event ID:{" "}
+                <span className="text-emerald-400 font-semibold">{eventIdFromUrl}</span>
+              </p>
+              </div>
+          ) : (
+            <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+              <p className="text-xs text-red-400">
+                No event selected. Please go back and register for an event first.
+              </p>
+            </div>
+          )}
+
 
           {/* ── Always-visible camera preview ── */}
           <div className="space-y-3">
@@ -240,83 +298,106 @@ export default function RegisterFacePage() {
           </div>
 
           {/* ── Personal info fields ── */}
-          <div className="space-y-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-              Your Information
-            </p>
+          {alreadyRegistered && (
+            <div className="space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                Your RFID
+              </p>
 
-            <div className="relative">
-              <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Full Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={isSubmitting}
-                className="w-full rounded-xl border border-white/10 bg-slate-900/60 py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50"
-              />
+              <div className="relative">
+                <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="RFID"
+                  value={rfid}
+                  onChange={(e) => setRfid(e.target.value)}
+                  disabled={isReenrolling}
+                  className="w-full rounded-xl border border-white/10 bg-slate-900/60 py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50"
+                />
+              </div>
             </div>
+          )}
 
-            <div className="relative">
-              <Hash size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Student ID"
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                disabled={isSubmitting}
-                className="w-full rounded-xl border border-white/10 bg-slate-900/60 py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50"
-              />
+          {/* ── Personal info fields ── */}
+          {!alreadyRegistered && (
+            <div className="space-y-4">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+                Your Information
+              </p>
+
+              <div className="relative">
+                <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  disabled={isSubmitting}
+                  className="w-full rounded-xl border border-white/10 bg-slate-900/60 py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50"
+                />
+              </div>
+
+              <div className="relative">
+                <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="email"
+                  placeholder="Email Address"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isSubmitting}
+                  className="w-full rounded-xl border border-white/10 bg-slate-900/60 py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50"
+                />
+              </div>
+
+              <div className="relative">
+                <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="RFID"
+                  value={rfid}
+                  onChange={(e) => setRfid(e.target.value)}
+                  disabled={isSubmitting}
+                  className="w-full rounded-xl border border-white/10 bg-slate-900/60 py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50"
+                />
+              </div>
             </div>
+          )}
 
-            <div className="relative">
-              <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="email"
-                placeholder="Email Address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isSubmitting}
-                className="w-full rounded-xl border border-white/10 bg-slate-900/60 py-3 pl-11 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50"
-              />
-            </div>
 
-            {eventsLoading ? (
-              <p className="text-xs text-slate-400">Loading events…</p>
-            ) : events.length === 0 ? (
-              <p className="text-xs text-red-400">No active events found. Contact your administrator.</p>
-            ) : (
-              <select
-                value={selectedEvent}
-                onChange={(e) => setSelectedEvent(e.target.value)}
-                disabled={isSubmitting}
-                className="w-full rounded-xl border border-white/10 bg-slate-900/60 py-3 px-4 text-sm text-slate-100 focus:border-emerald-500/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 disabled:opacity-50"
-              >
-                {events.map((ev) => (
-                  <option key={ev.event_id} value={String(ev.event_id)}>
-                    {ev.event_name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
 
           {/* Error */}
           {errorMessage && (
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 flex items-start gap-3">
               <AlertCircle size={20} className="text-red-400 shrink-0 mt-0.5" />
-              <p className="text-sm text-red-300">{errorMessage}</p>
+              <div className="flex-1">
+                <p className="text-sm text-red-300">{errorMessage}</p>
+                {errorMessage.includes("already registered") && !alreadyRegistered && (
+                  <p className="text-xs text-red-400 mt-2">
+                    You can update your face registration instead.
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Submit */}
-          <button
-            onClick={handleRegisterFace}
-            disabled={isSubmitting || !capturedImage || eventsLoading || events.length === 0}
-            className="w-full rounded-2xl bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? "Processing…" : "Register Face"}
-          </button>
+          {/* Submit or Re-enroll */}
+          {alreadyRegistered ? (
+            <button
+              onClick={handleReenrollFace}
+              disabled={isReenrolling || !capturedImage}
+              className="w-full rounded-2xl bg-blue-500 px-6 py-3.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isReenrolling ? "Updating Face…" : "Update My Face"}
+            </button>
+          ) : (
+            <button
+              onClick={handleRegisterFace}
+              disabled={isSubmitting || !capturedImage}
+              className="w-full rounded-2xl bg-emerald-400 px-6 py-3.5 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? "Processing…" : "Register Face"}
+            </button>
+          )}
 
           {/* Success */}
           {statusMessage && (
@@ -329,5 +410,13 @@ export default function RegisterFacePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterFacePage />
+    </Suspense>
   );
 }

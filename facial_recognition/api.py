@@ -96,7 +96,7 @@ def reload_gallery() -> None:
         supabase.table("face_embeddings")
         .select(
             "embedding_id, participant_id, embedding, event_id, "
-            "participants(participant_id, name, student_id)"
+            "participants(participant_id, name, rfid)"
         )
         .eq("is_active", True)
         .eq("event_id", event_id)
@@ -114,7 +114,7 @@ def reload_gallery() -> None:
         gallery.append({
             "participant_id": row["participants"]["participant_id"],
             "name":           row["participants"]["name"],
-            "student_id":     row["participants"]["student_id"],
+            "rfid":           row["participants"]["rfid"],
             "embedding":      emb / norm,
         })
 
@@ -153,7 +153,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:3001",
-        # "https://your-eventflow-app.vercel.app",
+        "https://event-flow-mu-pink.vercel.app",
     ],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -265,19 +265,22 @@ def trigger_reload():
 @app.post("/api/register")
 async def register_participant(
     name:       str        = Form(...),
-    student_id: str        = Form(...),
+    email:      str        = Form(...),
+    rfid:       str        = Form(...),
     image:      UploadFile = File(...),
+    event_id:   int        = Form(...),   # ← received from frontend
 ):
-    """
-    Enrolls a participant's face for the currently active event.
-
-    - If participant doesn't exist yet, creates them in `participants`.
-    - If they already exist, reuses their participant row.
-    - Inserts a new embedding in `face_embeddings` for the active event.
-    - One active embedding per participant per event.
-    """
-    event = require_active_event()
-    event_id = event["event_id"]
+    # Fetch the specific event by ID from the frontend
+    event_res = (
+        supabase.table("events")
+        .select("event_id, event_name")
+        .eq("event_id", event_id)
+        .single()
+        .execute()
+    )
+    if not event_res.data:
+        raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
+    event = event_res.data
 
     # Extract embedding
     frame     = decode_image(await image.read())
@@ -293,7 +296,7 @@ async def register_participant(
     existing = (
         supabase.table("participants")
         .select("participant_id, name")
-        .eq("student_id", student_id)
+        .eq("rfid", rfid)
         .execute()
     )
 
@@ -302,7 +305,7 @@ async def register_participant(
     else:
         p_res = (
             supabase.table("participants")
-            .insert({"name": name, "student_id": student_id})
+            .insert({"name": name, "email": email, "rfid": rfid})
             .execute()
         )
         participant = p_res.data[0]
@@ -337,8 +340,8 @@ async def register_participant(
     reload_gallery()
 
     logger.info(
-        "Registered: %s (student_id=%s) for event='%s' (id=%d)",
-        participant["name"], student_id, event["event_name"], event_id,
+        "Registered: %s (rfid=%s) for event='%s' (id=%d)",
+        participant["name"], rfid, event["event_name"], event_id,
     )
 
     return {
@@ -352,25 +355,31 @@ async def register_participant(
 
 @app.post("/api/re-enroll")
 async def re_enroll_participant(
-    student_id: str        = Form(...),
+    rfid:       str        = Form(...),
     image:      UploadFile = File(...),
+    event_id:   int        = Form(...),
 ):
-    """
-    Replaces a participant's face embedding for the active event.
-    Old embedding is marked inactive. New one is inserted as active.
-    """
-    event    = require_active_event()
-    event_id = event["event_id"]
+    # Fetch the specific event by ID — NOT require_active_event()
+    event_res = (
+        supabase.table("events")
+        .select("event_id, event_name")
+        .eq("event_id", event_id)
+        .single()
+        .execute()
+    )
+    if not event_res.data:
+        raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
+    event = event_res.data
 
     p_res = (
         supabase.table("participants")
         .select("participant_id, name")
-        .eq("student_id", student_id)
+        .eq("rfid", rfid)
         .single()
         .execute()
     )
     if not p_res.data:
-        raise HTTPException(status_code=404, detail=f"Student ID '{student_id}' not found.")
+        raise HTTPException(status_code=404, detail=f"RFID '{rfid}' not found.")
 
     participant = p_res.data
 
@@ -379,12 +388,10 @@ async def re_enroll_participant(
     if embedding is None:
         raise HTTPException(status_code=422, detail="No face detected in the image.")
 
-    # Deactivate old embedding for this event only
-    supabase.table("face_embeddings").update({"is_active": False}).eq(
+    supabase.table("face_embeddings").delete().eq(
         "participant_id", participant["participant_id"]
-    ).eq("event_id", event_id).eq("is_active", True).execute()
+    ).eq("event_id", event_id).execute()
 
-    # Insert fresh embedding
     supabase.table("face_embeddings").insert({
         "participant_id": participant["participant_id"],
         "event_id":       event_id,
@@ -455,24 +462,23 @@ async def verify_participant(
             action = "already_completed"
 
         logger.info(
-            "%s: %s (student_id=%s, event='%s', score=%.4f)",
-            action.upper(), match["name"], match["student_id"],
+            "%s: %s (rfid=%s, event='%s', score=%.4f)",
+            action.upper(), match["name"], match["rfid"],
             event["event_name"], score,
         )
 
-    messages = {
-        "checked_in":        f"Welcome, {match['name']}! Check-in recorded.",
-        "checked_out":       f"Goodbye, {match['name']}! Check-out recorded.",
-        "already_completed": f"{match['name']} has already checked in and out.",
-        "verified":          f"Welcome, {match['name']}!",
-    }
-
     if match:
+        messages = {
+            "checked_in":        f"Welcome, {match['name']}! Check-in recorded.",
+            "checked_out":       f"Goodbye, {match['name']}! Check-out recorded.",
+            "already_completed": f"{match['name']} has already checked in and out.",
+            "verified":          f"Welcome, {match['name']}!",
+        }
         return {
             "verified":       True,
             "action":         action,
             "name":           match["name"],
-            "student_id":     match["student_id"],
+            "rfid":           match["rfid"],
             "participant_id": match["participant_id"],
             "similarity":     round(score, 4),
             "threshold":      engine.threshold,
@@ -503,7 +509,7 @@ def list_participants(event_id: Optional[int] = None):
     if filter_id is not None:
         res = (
             supabase.table("face_embeddings")
-            .select("participants(participant_id, name, student_id, email, created_at)")
+            .select("participants(participant_id, name, rfid, email, created_at)")
             .eq("event_id", filter_id)
             .eq("is_active", True)
             .execute()
@@ -512,7 +518,7 @@ def list_participants(event_id: Optional[int] = None):
     else:
         res = (
             supabase.table("participants")
-            .select("participant_id, name, student_id, email, created_at")
+            .select("participant_id, name, rfid, email, created_at")
             .order("created_at", desc=True)
             .execute()
         )
@@ -521,19 +527,19 @@ def list_participants(event_id: Optional[int] = None):
     return {"count": len(participants), "participants": participants}
 
 
-@app.delete("/api/participants/{student_id}")
-def delete_participant(student_id: str):
+@app.delete("/api/participants/{rfid}")
+def delete_participant(rfid: str):
     """Deletes a participant. Cascades to face_embeddings and attendance."""
     res = (
         supabase.table("participants")
         .delete()
-        .eq("student_id", student_id)
+        .eq("rfid", rfid)
         .execute()
     )
     if not res.data:
-        raise HTTPException(status_code=404, detail=f"Student ID '{student_id}' not found.")
+        raise HTTPException(status_code=404, detail=f"RFID '{rfid}' not found.")
     reload_gallery()
-    return {"success": True, "message": f"Participant '{student_id}' deleted."}
+    return {"success": True, "message": f"Participant '{rfid}' deleted."}
 
 
 # ── Attendance ────────────────────────────────────────────────────────────────
@@ -552,7 +558,7 @@ def get_attendance(event_id: Optional[int] = None):
         .select(
             "log_id, check_in_similarity, check_out_similarity, "
             "check_in_at, check_out_at, is_verified, "
-            "participants(name, student_id), "
+            "participants(name, rfid), "
             "events(event_name)"
         )
         .eq("event_id", filter_id)
@@ -564,7 +570,7 @@ def get_attendance(event_id: Optional[int] = None):
         {
             "log_id":               r["log_id"],
             "name":                 r["participants"]["name"],
-            "student_id":           r["participants"]["student_id"],
+            "rfid":           r["participants"]["rfid"],
             "event_name":           r["events"]["event_name"],
             "check_in_similarity":  round(r["check_in_similarity"], 4) if r["check_in_similarity"] else None,
             "check_out_similarity": round(r["check_out_similarity"], 4) if r["check_out_similarity"] else None,

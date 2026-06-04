@@ -1,29 +1,19 @@
-// app/api/register-face/route.js
-// Forwards face registration requests to the FastAPI Python backend.
-
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, email, rfid, eventId, image } = body;
-    console.log("[register-face] eventId received:", eventId);
-    console.log("[register-face] formData event_id:", String(eventId));
+    const { rfid, eventId, image } = body;  // ← add eventId
 
-    if (!image) return Response.json({ error: "No image data provided." }, { status: 400 });
-    if (!name)  return Response.json({ error: "Name is required." },       { status: 400 });
-    if (!email) return Response.json({ error: "Email is required." },      { status: 400 });
-    if (!rfid)  return Response.json({ error: "RFID is required." },       { status: 400 });
+    if (!image)   return Response.json({ error: "No image data provided." }, { status: 400 });
+    if (!rfid)    return Response.json({ error: "RFID is required." },       { status: 400 });
+    if (!eventId) return Response.json({ error: "Event ID is required." },   { status: 400 });
 
     const FACE_API_URL = process.env.FACE_API_URL ?? "http://localhost:8000";
 
-    // Convert base64 → binary
     const base64Data  = image.replace(/^data:image\/\w+;base64,/, "");
     const imageBuffer = Buffer.from(base64Data, "base64");
 
-    // Build multipart form for FastAPI
     const formData = new FormData();
-    formData.append("name",  name);
-    formData.append("email", email);
-    formData.append("rfid",  rfid);
+    formData.append("rfid",     rfid);
     formData.append("event_id", String(eventId));
     formData.append(
       "image",
@@ -31,7 +21,7 @@ export async function POST(request) {
       "capture.jpg"
     );
 
-    const pythonRes = await fetch(`${FACE_API_URL}/api/register`, {
+    const pythonRes = await fetch(`${FACE_API_URL}/api/re-enroll`, {
       method: "POST",
       body:   formData,
     });
@@ -41,7 +31,7 @@ export async function POST(request) {
     try {
       data = JSON.parse(rawText);
     } catch {
-      console.error("[register-face] Non-JSON response:", rawText.slice(0, 200));
+      console.error("[re-enroll-face] Non-JSON response:", rawText.slice(0, 200));
       return Response.json(
         { error: "Face API returned an unexpected response. Is the Python server running?" },
         { status: 502 }
@@ -50,7 +40,7 @@ export async function POST(request) {
 
     if (!pythonRes.ok) {
       return Response.json(
-        { error: data.detail || data.error || "Registration failed." },
+        { error: data.detail || data.error || "Re-enrollment failed." },
         { status: pythonRes.status }
       );
     }
@@ -58,7 +48,7 @@ export async function POST(request) {
     return Response.json(data, { status: 200 });
 
   } catch (err) {
-    console.error("[register-face] Error:", err);
+    console.error("[re-enroll-face] Error:", err);
     return Response.json(
       { error: "Internal server error. Is the Python API running?" },
       { status: 500 }

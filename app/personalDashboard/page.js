@@ -243,13 +243,13 @@ export default function PersonalDashboard() {
 							const fullName = firstName && lastName ? `${firstName} ${lastName}` : "User";
 							const { data: newParticipant, error: insertError } = await supabase
 								.from("participants")
-							.insert({
-								name: fullName,
-								email: email,
-								student_id: email,
-								phone: null,
-								reg_rfid: null
-							})
+								.insert({
+									name: fullName,
+									email: email,
+									student_id: email, // Use email as student_id
+									phone: null,
+									rfid: null
+								})
 								.select("participant_id");
 							
 							if (newParticipant && newParticipant.length > 0) {
@@ -398,115 +398,114 @@ export default function PersonalDashboard() {
 		}
 	};
 
-  const handleSetRFIDCard = async () => {
-    if (!participantId) {
-      setRfidMessage("Error: Participant profile not loaded");
-      return;
-    }
+	const handleSetRFIDCard = async () => {
+		if (!participantId) {
+			setRfidMessage("Error: Participant profile not loaded");
+			return;
+		}
 
-    if (!newRFIDCode.trim()) {
-      setRfidMessage("Please enter your RFID code");
-      return;
-    }
+		if (!newRFIDCode.trim()) {
+			setRfidMessage("Please enter your RFID code");
+			return;
+		}
 
-    setIsSettingRFID(true);
-    setRfidMessage("");
+		setIsSettingRFID(true);
+		setRfidMessage("");
 
-    try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("event_participants")
-        .update({ reg_rfid: newRFIDCode })
-        .eq("participant_id", participantId);
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("participants")
+				.update({rfid: newRFIDCode })
+				.eq("participant_id", participantId);
 
-      if (error) {
-        console.error("RFID save error:", error);
-        setRfidMessage("Error saving RFID: " + error.message);
-      } else {
-        setRegisteredRFID(newRFIDCode);
-        setNewRFIDCode("");
-        setRfidMessage("✓ RFID card registered successfully!");
-        setTimeout(() => setRfidMessage(""), 3000);
-      }
-    } catch (error) {
-      console.error("RFID registration error:", error);
-      setRfidMessage("Error: " + error.message);
-    } finally {
-      setIsSettingRFID(false);
-    }
-  };
+			if (error) {
+				console.error("RFID save error:", error);
+				setRfidMessage("Error saving RFID: " + error.message);
+			} else {
+				setRegisteredRFID(newRFIDCode);
+				setNewRFIDCode("");
+				setRfidMessage("✓ RFID card registered successfully!");
+				setTimeout(() => setRfidMessage(""), 3000);
+			}
+		} catch (error) {
+			console.error("RFID registration error:", error);
+			setRfidMessage("Error: " + error.message);
+		} finally {
+			setIsSettingRFID(false);
+		}
+	};
 
-  const handleRemoveRFID = async () => {
-    if (!participantId) return;
+	const handleRemoveRFID = async () => {
+		if (!participantId) return;
 
-    setIsSettingRFID(true);
-    setRfidMessage("");
+		setIsSettingRFID(true);
+		setRfidMessage("");
 
-    try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("event_participants")
-        .update({ reg_rfid: null })
-        .eq("participant_id", participantId);
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("participants")
+				.update({ rfid: null })
+				.eq("participant_id", participantId);
 
-      if (error) {
-        console.error("RFID remove error:", error);
-        setRfidMessage("Error removing RFID: " + error.message);
-      } else {
-        setRegisteredRFID(null);
-        setNewRFIDCode("");
-        setRfidMessage("✓ RFID card removed successfully!");
-        setTimeout(() => setRfidMessage(""), 3000);
-      }
-    } catch (error) {
-      console.error("RFID remove error:", error);
-      setRfidMessage("Error: " + error.message);
-    } finally {
-      setIsSettingRFID(false);
-    }
-  };
+			if (error) {
+				console.error("RFID remove error:", error);
+				setRfidMessage("Error removing RFID: " + error.message);
+			} else {
+				setRegisteredRFID(null);
+				setNewRFIDCode("");
+				setRfidMessage("✓ RFID card removed successfully!");
+				setTimeout(() => setRfidMessage(""), 3000);
+			}
+		} catch (error) {
+			console.error("RFID remove error:", error);
+			setRfidMessage("Error: " + error.message);
+		} finally {
+			setIsSettingRFID(false);
+		}
+	};
 
-  const handleRFIDSubmit = async () => {
-    if (!participantId) {
-      setRegistrationMessage("Error: Participant profile not loaded");
-      return;
-    }
+	const handleRFIDSubmit = async () => {
+		if (!participantId) {
+			setRegistrationMessage("Error: Participant profile not loaded");
+			return;
+		}
 
-    if (!rfidCode.trim()) {
-      setRegistrationMessage("Please enter your RFID code");
-      return;
-    }
+		if (!rfidCode.trim()) {
+			setRegistrationMessage("Please enter your RFID code");
+			return;
+		}
 
-    setIsRegistering(true);
+		setIsRegistering(true);
 
-    try {
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("event_participants")
-        .update({ reg_rfid: rfidCode })
-        .eq("event_id", selectedEvent.event_id)
-        .eq("participant_id", participantId);
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("participants")
+				.update({ rfid: rfidCode })
+				.eq("participant_id", participantId);
 
-      if (error) {
-        console.error("RFID save error:", error);
-        setRegistrationMessage("Error saving RFID: " + error.message);
-      } else {
-        setRegistrationMessage("✓ RFID registered successfully! Event registration complete.");
-        setTimeout(() => {
-          setSelectedEvent(null);
-          setShowRFIDStep(false);
-          setRfidCode("");
-        }, 2000);
-      }
-    } catch (error) {
-      console.error("Catch error:", error);
-      setRegistrationMessage("Error: " + error.message);
-    } finally {
-      setIsRegistering(false);
-    }
-  };
+			if (error) {
+				console.error("RFID save error:", error);
+				setRegistrationMessage("Error saving RFID: " + error.message);
+			} else {
+				setRegistrationMessage("✓ RFID registered successfully! Event registration complete.");
+				setTimeout(() => {
+					setSelectedEvent(null);
+					setShowRFIDStep(false);
+					setRfidCode("");
+				}, 2000);
+			}
+		} catch (error) {
+			console.error("Catch error:", error);
+			setRegistrationMessage("Error: " + error.message);
+		} finally {
+			setIsRegistering(false);
+		}
+	};
 
-  useEffect(() => {
+	useEffect(() => {
 		const fetchData = async () => {
 			const supabase = createClient();
 			const userRole = localStorage.getItem("userRole");
@@ -521,7 +520,7 @@ export default function PersonalDashboard() {
 					.order("event_date", { ascending: true });
 
 				const { data: attendance } = await supabase
-					.from("attendance")
+					.from("attendance_logs")
 					.select("*");
 
 				if (events) {
@@ -685,13 +684,13 @@ export default function PersonalDashboard() {
 						const supabaseForRFID = createClient();
 						const { data: participantData } = await supabaseForRFID
 							.from("participants")
-							.select("reg_rfid")
+							.select("rfid")
 							.eq("email", email)
 							.single();
 						
-						if (participantData?.reg_rfid) {
-							setRegisteredRFID(participantData.reg_rfid);
-							console.log("Found registered RFID:", participantData.reg_rfid);
+						if (participantData?.rfid) {
+							setRegisteredRFID(participantData.rfid);
+							console.log("Found registered RFID:", participantData.rfid);
 						}
 					} else {
 						console.warn("No data returned from database");
@@ -824,10 +823,10 @@ export default function PersonalDashboard() {
 							</div>
 						</section>
 
-						{/* Performance Analytics */}
+						{/* Behavior Analytics */}
 						<section id="behavior" className="space-y-4">
 							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
-								Performance
+								Behavior & Performance
 							</h2>
 							{participantId ? (
 								<BehaviorAnalyticsCard participantId={participantId} />
@@ -841,10 +840,10 @@ export default function PersonalDashboard() {
 								>
 									<div className="text-center">
 										<p style={{ color: "var(--text-muted)" }} className="text-sm mb-2">
-											Performance Analytics Not Available
+											Behavior Analytics Not Available
 										</p>
 										<p style={{ color: "var(--text-muted)" }} className="text-xs">
-											Your performance analytics will be available once your profile is linked to event records. Start attending events to see your performance classification.
+											Your behavior analytics will be available once your profile is linked to event records. Start attending events to see your behavior classification.
 										</p>
 									</div>
 								</div>
@@ -1322,14 +1321,19 @@ export default function PersonalDashboard() {
 										Register your face for secure event check-in
 									</p>
 									<button
-										onClick={() => router.push("/personalDashboard/register-face")}
-										className="mt-4 w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
-										style={{
-											backgroundColor: "rgba(16, 185, 129, 0.15)",
-											color: "#10b981",
-										}}
+  										onClick={() => {
+    										// If user has registered events, use the first upcoming one
+    										// Or pass all registered event IDs
+    										const registeredIds = [...userRegisteredEventIds];
+    										const query = registeredIds.length > 0 
+      											? `?eventId=${registeredIds[0]}` 
+      											: "";
+    										router.push(`/personalDashboard/register-face${query}`);
+  										}}
+  										className="mt-4 w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+  										style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}
 									>
-										Register Face ID
+  										Register Face ID
 									</button>
 									<p className="mt-3 text-xs font-semibold flex items-center gap-1.5" style={{ color: "#10b981" }}>
 										<CheckCircle size={13} /> Registered

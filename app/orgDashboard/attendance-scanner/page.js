@@ -186,6 +186,13 @@ export default function AttendanceScannerPage() {
     return () => clearInterval(scanTimerRef.current);
   }, [cameraReady, scanning, captureAndVerify]);
 
+  // ── Auto-start scanning when camera is ready ────────────────────────────────
+  useEffect(() => {
+    if (cameraReady && !scanning) {
+      setScanning(true);
+    }
+  }, [cameraReady, scanning]);
+
   // ── Status config ─────────────────────────────────────────────────────────────
   const statusConfig = {
     idle: {
@@ -305,8 +312,8 @@ export default function AttendanceScannerPage() {
             style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}
           >
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Status</p>
-            <p className="mt-2 text-lg font-bold" style={{ color: scanning ? "#f59e0b" : "#6b7280" }}>
-              {scanning ? "Scanning" : "Idle"}
+            <p className="mt-2 text-lg font-bold" style={{ color: "#10b981" }}>
+              {scanning ? "🔄 Scanning" : "⏸ Paused"}
             </p>
           </div>
         </div>
@@ -415,7 +422,7 @@ export default function AttendanceScannerPage() {
                   : "bg-blue-500 text-white"
               }`}
             >
-              {scanning ? "⏹ Stop Scanning" : "▶ Start Scanning"}
+              {scanning ? "⏹ Stop Scanning" : "▶ Resume Scanning"}
             </button>
 
             {/* Debug: Test Button */}
@@ -464,8 +471,8 @@ export default function AttendanceScannerPage() {
               {logEntries.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <Users size={40} className="mb-3 opacity-20" style={{ color: "var(--foreground)" }} />
-                  <p className="text-sm font-medium text-slate-400">No participants checked in yet.</p>
-                  <p className="mt-1 text-xs text-slate-600">Press "Start Scanning" to begin recording attendance.</p>
+                  <p className="text-sm font-medium text-slate-400">Scanning for participants...</p>
+                  <p className="mt-1 text-xs text-slate-600">Attendance records will appear here as faces are recognized.</p>
                 </div>
               ) : (
                 <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>

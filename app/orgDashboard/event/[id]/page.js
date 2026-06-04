@@ -129,10 +129,18 @@ export default function EventDetailsPage() {
 
 	const videoRef = useRef(null);
 	const canvasRef = useRef(null);
+	const streamRef = useRef(null);
+	const scanTimerRef = useRef(null);
+	const resetTimerRef = useRef(null);
+
 	const [cameraReady, setCameraReady] = useState(false);
+	const [cameraError, setCameraError] = useState("");
+	const [isScanning, setIsScanning] = useState(false);
+	const [scanStatus, setScanStatus] = useState("idle"); // idle | scanning | verified | rejected | already_done
+	const [scanResult, setScanResult] = useState(null);
+	const [checkedInFaceIds, setCheckedInFaceIds] = useState(new Set());
 	const [attendees, setAttendees] = useState([]);
 	const rfidInput = useRef(null);
-	const [scanResult, setScanResult] = useState(null);
 
 	useEffect(() => {
 		const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -159,11 +167,12 @@ export default function EventDetailsPage() {
 				if (error) throw error;
 				setEventData(event);
 
-				// Fetch attendees
+				// Fetch attendees with check-in and check-out times
 				const { data: attendanceData } = await supabase
 					.from("attendance")
-					.select("*, participants(*)")
-					.eq("event_id", eventId);
+					.select("*, participants(id, name, email)")
+					.eq("event_id", eventId)
+					.order("check_in_time", { ascending: false });
 
 				if (attendanceData) {
 					setAttendees(attendanceData);
@@ -185,25 +194,142 @@ export default function EventDetailsPage() {
 		window.location.href = "/login";
 	};
 
-	const startCamera = async () => {
-		try {
-			const stream = await navigator.mediaDevices.getUserMedia({
-				video: { facingMode: "user" },
-			});
-			if (videoRef.current) {
-				videoRef.current.srcObject = stream;
-				setCameraReady(true);
+	// Auto-start camera when unified-scanner tab opens
+	useEffect(() => {
+		if (activeTab !== "unified-scanner" || !eventData?.with_FaceId) return;
+
+		const startCameraForScanning = async () => {
+			try {
+				setCameraError("");
+				const stream = await navigator.mediaDevices.getUserMedia({
+					video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+				});
+				streamRef.current = stream;
+				if (videoRef.current) {
+					videoRef.current.srcObject = stream;
+					setTimeout(() => {
+						setCameraReady(true);
+						setIsScanning(true); // Auto-start scanning
+					}, 500);
+				}
+			} catch (error) {
+				setCameraError("Cannot access camera. Check permissions and try again.");
+				console.error("Camera error:", error);
 			}
+		};
+
+		startCameraForScanning();
+
+		return () => {
+			if (streamRef.current) {
+				streamRef.current.getTracks().forEach((track) => track.stop());
+			}
+			if (scanTimerRef.current) clearInterval(scanTimerRef.current);
+			if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+			setCameraReady(false);
+			setIsScanning(false);
+		};
+	}, [activeTab, eventData?.with_FaceId]);
+
+	// Continuous face scanning loop
+	const captureAndVerifyFace = async (alreadyCheckedInIds) => {
+		if (!videoRef.current || !canvasRef.current) return;
+
+		const video = videoRef.current;
+		const canvas = canvasRef.current;
+		const ctx = canvas.getContext("2d");
+		canvas.width = video.videoWidth;
+		canvas.height = video.videoHeight;
+		ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+		const imageDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+
+		setScanStatus("scanning");
+
+		try {
+			const res = await fetch("/api/verify-face", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ image: imageDataUrl }),
+			});
+			const data = await res.json();
+
+			if (!res.ok || (!data.verified && data.similarity === 0)) {
+				setScanStatus("idle");
+				return;
+			}
+
+			setScanResult(data);
+
+			if (data.verified) {
+				const participantId = data.participant_id || data.student_id;
+
+				if (alreadyCheckedInIds.has(participantId)) {
+					setScanStatus("already_done");
+				} else {
+					setScanStatus("verified");
+					setCheckedInFaceIds((prev) => new Set([...prev, participantId]));
+
+					// Record check-in to database
+					const supabase = createClient();
+					const { error } = await supabase.from("attendance").insert({
+						event_id: eventId,
+						participant_id: participantId,
+						check_in_time: new Date().toISOString(),
+						verified: true,
+						verification_method: "face",
+					});
+
+					if (!error) {
+						// Refresh attendees list
+						const { data: newAttendees } = await supabase
+							.from("attendance")
+							.select("*, participants(id, name, email)")
+							.eq("event_id", eventId)
+							.order("check_in_time", { ascending: false });
+
+						if (newAttendees) setAttendees(newAttendees);
+					}
+				}
+			} else {
+				setScanStatus("rejected");
+			}
+
+			// Auto-reset after showing result
+			resetTimerRef.current = setTimeout(() => {
+				setScanStatus("idle");
+				setScanResult(null);
+			}, 2500);
 		} catch (error) {
-			console.error("Camera error:", error);
+			console.error("Verification error:", error);
+			setScanStatus("idle");
 		}
 	};
 
+	const checkedInRef = useRef(checkedInFaceIds);
+	useEffect(() => {
+		checkedInRef.current = checkedInFaceIds;
+	}, [checkedInFaceIds]);
+
+	useEffect(() => {
+		if (!cameraReady || !isScanning || scanStatus !== "idle") return;
+
+		scanTimerRef.current = setInterval(() => {
+			captureAndVerifyFace(checkedInRef.current);
+		}, 2000);
+
+		return () => {
+			if (scanTimerRef.current) clearInterval(scanTimerRef.current);
+		};
+	}, [cameraReady, isScanning, scanStatus]);
+
+	// Legacy: Manual start/stop camera (keeping for backward compatibility)
 	const stopCamera = () => {
-		if (videoRef.current?.srcObject) {
-			videoRef.current.srcObject.getTracks().forEach((track) => track.stop());
+		if (streamRef.current) {
+			streamRef.current.getTracks().forEach((track) => track.stop());
 		}
 		setCameraReady(false);
+		setIsScanning(false);
+		setScanStatus("idle");
 	};
 
 	const handleRFIDScan = async (e) => {
@@ -634,31 +760,108 @@ export default function EventDetailsPage() {
 													Face Recognition
 												</h3>
 												<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(59, 130, 246, 0.15)", color: "#3b82f6" }}>
-													PRIMARY
+													AUTO
 												</span>
 											</div>
-											<video
-												ref={videoRef}
-												autoPlay
-												playsInline
-												className="w-full rounded-lg mb-3"
-												style={{ backgroundColor: "#000", aspectRatio: "4/3" }}
-											/>
-											<canvas ref={canvasRef} style={{ display: "none" }} />
-											<div className="flex items-center justify-between">
-												<span className="text-xs" style={{ color: cameraReady ? "#10b981" : "var(--text-muted)" }}>
-													{cameraReady ? "Camera active" : "Starting camera..."}
+
+											{cameraError ? (
+												<div className="flex items-center justify-center rounded-lg bg-red-500/10 border border-red-500/30 p-4 mb-3" style={{ aspectRatio: "4/3" }}>
+													<div className="text-center">
+														<XCircle size={32} style={{ color: "#ef4444", margin: "0 auto" }} />
+														<p className="text-xs text-red-400 mt-2">{cameraError}</p>
+													</div>
+												</div>
+											) : (
+												<div className={`relative rounded-lg mb-3 border-2 transition-all ${
+													scanStatus === "scanning" ? "border-yellow-400" :
+													scanStatus === "verified" ? "border-emerald-400" :
+													scanStatus === "rejected" ? "border-red-400" :
+													"border-blue-400/50"
+												}`} style={{ aspectRatio: "4/3" }}>
+													<video
+														ref={videoRef}
+														autoPlay
+														playsInline
+														muted
+														className="w-full h-full rounded-lg object-cover"
+														style={{ backgroundColor: "#000" }}
+													/>
+													<canvas ref={canvasRef} style={{ display: "none" }} />
+
+													{/* Status overlay */}
+													<div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 flex items-center justify-center gap-2">
+														{scanStatus === "scanning" && <div className="h-2.5 w-2.5 animate-ping rounded-full bg-yellow-400" />}
+														{scanStatus === "verified" && <CheckCircle size={14} style={{ color: "#10b981" }} />}
+														{scanStatus === "rejected" && <XCircle size={14} style={{ color: "#ef4444" }} />}
+														<span className="text-xs font-semibold" style={{
+															color: scanStatus === "scanning" ? "#fbbf24" :
+																	scanStatus === "verified" ? "#10b981" :
+																	scanStatus === "rejected" ? "#ef4444" :
+																	"#9ca3af"
+														}}>
+															{scanStatus === "idle" ? "Ready" :
+																scanStatus === "scanning" ? "Analyzing..." :
+																scanStatus === "verified" ? "Face Matched" :
+																scanStatus === "rejected" ? "Not Recognized" :
+																""}
+														</span>
+													</div>
+
+													{/* Camera startup overlay */}
+													{!cameraReady && (
+														<div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-lg">
+															<p className="text-sm text-slate-400">Initializing camera...</p>
+														</div>
+													)}
+												</div>
+											)}
+
+											{/* Result card */}
+											{scanResult && scanStatus !== "idle" && scanStatus !== "scanning" && (
+												<div className={`rounded-lg p-3 mb-3 text-xs ${
+													scanStatus === "verified"
+														? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
+														: scanStatus === "already_done"
+														? "bg-slate-500/10 border border-slate-500/30 text-slate-300"
+														: "bg-red-500/10 border border-red-500/30 text-red-300"
+												}`}>
+													{scanStatus === "verified" && (
+														<div className="flex items-center gap-2">
+															<CheckCircle size={14} />
+															<span>✓ {scanResult.name} checked in</span>
+														</div>
+													)}
+													{scanStatus === "already_done" && (
+														<div className="flex items-center gap-2">
+															<CheckCircle size={14} />
+															<span>{scanResult.name} already checked in</span>
+														</div>
+													)}
+													{scanStatus === "rejected" && (
+														<div className="flex items-center gap-2">
+															<XCircle size={14} />
+															<span>Face not recognized (${(scanResult.similarity * 100).toFixed(0)}%)</span>
+														</div>
+													)}
+												</div>
+											)}
+
+											<div className="flex items-center justify-between text-xs">
+												<span style={{ color: cameraReady ? "#10b981" : "var(--text-muted)" }}>
+													{cameraReady ? "Camera active • Auto-scanning" : "Starting camera..."}
 												</span>
-												<button
-													onClick={cameraReady ? stopCamera : startCamera}
-													className="rounded-full px-4 py-1.5 text-xs font-semibold transition"
-													style={{
-														backgroundColor: cameraReady ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
-														color: cameraReady ? "#ef4444" : "#10b981",
-													}}
-												>
-													{cameraReady ? "Stop Camera" : "Start Camera"}
-												</button>
+												{cameraReady && (
+													<button
+														onClick={stopCamera}
+														className="px-3 py-1.5 rounded-full text-xs font-semibold transition"
+														style={{
+															backgroundColor: "rgba(239, 68, 68, 0.15)",
+															color: "#ef4444",
+														}}
+													>
+														Stop
+													</button>
+												)}
 											</div>
 										</div>
 									)}
@@ -748,7 +951,7 @@ export default function EventDetailsPage() {
 													Check-in Time
 												</th>
 												<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-													Verification
+													Check-out Time
 												</th>
 											</tr>
 										</thead>
@@ -773,41 +976,10 @@ export default function EventDetailsPage() {
 															? new Date(attendee.check_in_time).toLocaleTimeString()
 															: "-"}
 													</td>
-													<td className="px-6 py-4">
-														{attendee.check_in_time && !attendee.verified ? (
-															<span
-																className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs"
-																style={{
-																	backgroundColor: "rgba(245, 158, 11, 0.1)",
-																	color: "#f59e0b",
-																}}
-															>
-																<AlertCircle size={12} />
-																Partially Checked In
-															</span>
-														) : attendee.verified ? (
-															<span
-																className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs"
-																style={{
-																	backgroundColor: "rgba(16, 185, 129, 0.1)",
-																	color: "#10b981",
-																}}
-															>
-																<Check size={12} />
-																Verified
-															</span>
-														) : (
-															<span
-																className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs"
-																style={{
-																	backgroundColor: "rgba(239, 68, 68, 0.1)",
-																	color: "#ef4444",
-																}}
-															>
-																<X size={12} />
-																Pending
-															</span>
-														)}
+													<td className="px-6 py-4" style={{ color: "var(--foreground)" }}>
+														{attendee.check_out_time
+															? new Date(attendee.check_out_time).toLocaleTimeString()
+															: "-"}
 													</td>
 												</tr>
 											))}
@@ -843,13 +1015,13 @@ export default function EventDetailsPage() {
 									</h2>
 									<button
 										onClick={() => {
-											const headers = ["Name", "Email", "Check-in Time", "Verified", "Status"];
+											const headers = ["Name", "Email", "Check-in Time", "Check-out Time", "Status"];
 											const rows = attendees.map((a) => [
 												a.participants?.name || "Unknown",
 												a.participants?.email || "N/A",
 												a.check_in_time ? new Date(a.check_in_time).toLocaleTimeString() : "-",
-												a.verified ? "Yes" : "No",
-												a.verified ? "Verified" : "Pending",
+												a.check_out_time ? new Date(a.check_out_time).toLocaleTimeString() : "-",
+												a.check_out_time ? "Checked Out" : a.check_in_time ? "Checked In" : "Not Checked In",
 											]);
 											const csvContent = [headers.join(","), ...rows.map((row) => row.map((cell) => `"${cell}"`).join(","))].join("\n");
 											const blob = new Blob([csvContent], { type: "text/csv" });
@@ -870,26 +1042,26 @@ export default function EventDetailsPage() {
 
 								<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 									<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Total Checked</p>
-										<p className="mt-2 text-2xl font-bold" style={{ color: "var(--foreground)" }}>{attendees.length}</p>
+										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Total Checked In</p>
+										<p className="mt-2 text-2xl font-bold" style={{ color: "var(--foreground)" }}>{attendees.filter((a) => a.check_in_time).length}</p>
 									</div>
 									<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Verified</p>
+										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Checked Out</p>
 										<p className="mt-2 text-2xl font-bold" style={{ color: "#10b981" }}>
-											{attendees.filter((a) => a.verified).length}
+											{attendees.filter((a) => a.check_out_time).length}
 										</p>
 									</div>
 									<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Pending</p>
+										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Pending Checkout</p>
 										<p className="mt-2 text-2xl font-bold" style={{ color: "#f97316" }}>
-											{attendees.filter((a) => !a.verified).length}
+											{attendees.filter((a) => a.check_in_time && !a.check_out_time).length}
 										</p>
 									</div>
 									<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
 										<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Attendance Rate</p>
 										<p className="mt-2 text-2xl font-bold" style={{ color: "#3b82f6" }}>
 											{eventData?.expected_attendance
-												? Math.round((attendees.length / eventData.expected_attendance) * 100)
+												? Math.round((attendees.filter((a) => a.check_in_time).length / eventData.expected_attendance) * 100)
 												: 0}
 											%
 										</p>
