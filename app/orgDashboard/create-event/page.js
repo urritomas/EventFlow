@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../../components/SiteHeader";
 import DashboardToolbar from "../../components/DashboardToolbar";
+import dynamic from "next/dynamic";
 import {
 	Menu,
 	X,
@@ -25,11 +26,15 @@ import {
 	LogOut as LogOutIcon,
 } from "lucide-react";
 
-	function Sidebar({ isOpen, onClose, onLogout }) {
-		const menuItems = [
-			{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
-			{ label: "Create Event", icon: Zap, href: "/orgDashboard/create-event" },
-		];
+const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), {
+	ssr: false,
+});
+
+function Sidebar({ isOpen, onClose, onLogout }) {
+	const menuItems = [
+		{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
+		{ label: "Create Event", icon: Zap, href: "/orgDashboard/create-event" },
+	];
 
 	return (
 		<>
@@ -117,21 +122,23 @@ export default function CreateEventPage() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [successMessage, setSuccessMessage] = useState("");
 	const [errorMessage, setErrorMessage] = useState("");
+const [location, setLocation] = useState({ lat: null, lng: null });
+  const [geofenceRadius, setGeofenceRadius] = useState(100);
 
-	const [formData, setFormData] = useState({
-		eventName: "",
-		eventType: "",
-		eventDate: "",
-		startTime: "",
-		endTime: "",
-		venue: "",
-		fullAddress: "",
-		expectedAttendance: "",
-		description: "",
-		rfidEnabled: false,
-		faceRecognitionEnabled: false,
-		geofencingEnabled: false,
-	});
+  const [formData, setFormData] = useState({
+    eventName: "",
+    eventType: "",
+    eventDate: "",
+    startTime: "",
+    endTime: "",
+    venue: "",
+    fullAddress: "",
+    expectedAttendance: "",
+    description: "",
+    rfidEnabled: false,
+    faceRecognitionEnabled: false,
+    geofencingEnabled: false,
+  });
 
 	useEffect(() => {
 		const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -181,9 +188,6 @@ export default function CreateEventPage() {
 			}
 
 			const supabase = createClient();
-			const orgId = localStorage.getItem("orgId");
-			const email = localStorage.getItem("email");
-			const username = localStorage.getItem("username");
 
 			// Create event with column mapping matching existing Supabase table
 			const eventPayload = {
@@ -195,11 +199,14 @@ export default function CreateEventPage() {
 				venue_name: formData.venue,
 				full_address: formData.fullAddress,
 				expected_attendance: parseInt(formData.expectedAttendance),
+				latitude: location.lat,
+				longitude: location.lng,
+				geofence_radius: geofenceRadius,
 				is_active: true,
 				is_accepted: false,
-			with_RFID: !!formData.rfidEnabled,
-			with_FaceId: !!formData.faceRecognitionEnabled,
-			with_Geo: !!formData.geofencingEnabled,
+				with_RFID: !!formData.rfidEnabled,
+				with_FaceId: !!formData.faceRecognitionEnabled,
+				with_Geo: !!formData.geofencingEnabled,
 			};
 
 			console.log("Creating event with payload:", eventPayload);
@@ -234,6 +241,7 @@ export default function CreateEventPage() {
 				faceRecognitionEnabled: false,
 				geofencingEnabled: false,
 			});
+			setLocation({ lat: null, lng: null });
 
 			// Redirect to dashboard to see the new event
 			setTimeout(() => {
@@ -527,6 +535,24 @@ export default function CreateEventPage() {
                         }}
                       />
                     </div>
+
+                    <div className="mb-4">
+                      <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                        Pick Event Location
+                      </label>
+                      <LocationPickerMap
+                        radius={100}
+                        onLocationSelect={(pos) => {
+                          setLocation({
+                            lat: pos.lat,
+                            lng: pos.lng,
+                          });
+                        }}
+                      />
+                      <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                        Click on the map to set the event location
+                      </p>
+                    </div>
                   </div>
                 </section>
 
@@ -602,8 +628,63 @@ export default function CreateEventPage() {
                   </div>
                 </section>
 
+                {/* Geofence Settings - shown only when geofencing is enabled */}
+                {formData.geofencingEnabled && (
+                  <section
+                    className="rounded-lg border p-6 animate-[fadeIn_0.8s_ease-out]"
+                    style={{
+                      backgroundColor: "var(--surface)",
+                      borderColor: "var(--border-subtle)",
+                    }}
+                  >
+                    <h2 className="mb-4 text-lg font-semibold flex items-center gap-2" style={{ color: "var(--foreground)" }}>
+                      <MapPin size={18} />
+                      Geofence Configuration
+                    </h2>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          Geofence Radius (meters)
+                        </label>
+                        <input
+                          type="number"
+                          value={geofenceRadius}
+                          onChange={(e) => setGeofenceRadius(parseInt(e.target.value) || 100)}
+                          min="10"
+                          max="5000"
+                          step="10"
+                          className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                          style={{
+                            backgroundColor: "var(--page-bg)",
+                            borderColor: "var(--border-subtle)",
+                            color: "var(--foreground)",
+                          }}
+                        />
+                        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                          Participants must be within this distance from the venue to check in
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          Geofence Area Preview
+                        </label>
+                        <LocationPickerMap
+                          radius={geofenceRadius}
+                          initialLocation={location.lat && location.lng ? { lat: location.lat, lng: location.lng } : null}
+                          readonly={true}
+                        />
+                        <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                          Geofence center uses the venue location set above
+                        </p>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
                 {/* Submit Button */}
-                <div className="flex gap-3 animate-[fadeIn_0.8s_ease-out]">
+                <div className="flex gap-3 animate-[fadeIn_0.9s_ease-out]">
                   <button
                     type="button"
                     onClick={() => router.back()}

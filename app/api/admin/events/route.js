@@ -40,8 +40,12 @@ export async function POST(req) {
 
     if (action === 'delete') {
       // Delete related records first (cascade delete)
-      await supabase.from('attendance').delete().eq(idKey, id);
-      await supabase.from('event_participants').delete().eq(idKey, id);
+      // Use event_id for related tables
+      const { error: attError } = await supabase.from('attendance').delete().eq('event_id', id);
+      if (attError) console.error('Error deleting attendance:', attError);
+
+      const { error: regError } = await supabase.from('event_participants').delete().eq('event_id', id);
+      if (regError) console.error('Error deleting registrations:', regError);
 
       const { data, error } = await supabase.from('events').delete().eq(idKey, id).select();
       if (error) return NextResponse.json({ error }, { status: 500 });

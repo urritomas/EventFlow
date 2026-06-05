@@ -257,6 +257,7 @@ export default function OrgDashboard() {
 						capacity: e.expected_attendance || 0,
 						registered: registrationCounts[e.event_id] || 0,
 						date: e.event_date,
+						with_Geo: e.with_Geo,
 					}));
 					setActiveEvents(eventList);
 					setStats((prev) => ({ ...prev, activeEvents: events.length }));
@@ -410,7 +411,7 @@ export default function OrgDashboard() {
 											color: "white",
 										}}
 									>
-										Create Your First Event
+										Create Your Event
 									</button>
 								</div>
 							) : (
@@ -479,7 +480,25 @@ export default function OrgDashboard() {
 												<span className="text-xs" style={{ color: "var(--text-muted)" }}>
 													Click to manage
 												</span>
-												<ChevronRight size={16} style={{ color: "var(--text-muted)" }} />
+												<div className="flex items-center gap-2">
+													{event.with_Geo && (
+														<button
+															onClick={(e) => {
+																e.stopPropagation();
+																router.push(`/orgDashboard/event/${event.event_id}`);
+															}}
+															className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold transition hover:opacity-90"
+															style={{
+																backgroundColor: "rgba(16, 185, 129, 0.15)",
+																color: "#10b981",
+															}}
+														>
+															<MapPin size={12} />
+															Geofence
+														</button>
+													)}
+													<ChevronRight size={16} style={{ color: "var(--text-muted)" }} />
+												</div>
 											</div>
 										</button>
 									))}

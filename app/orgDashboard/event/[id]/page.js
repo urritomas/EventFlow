@@ -4,30 +4,36 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../../../components/SiteHeader";
+import dynamic from "next/dynamic";
+
+const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap"), {
+  ssr: false,
+});
 import {
-	Menu,
-	X,
-	LogOut,
-	LogIn,
-	ArrowLeft,
-	Calendar,
-	Clock,
-	MapPin,
-	Users,
-	BarChart3,
-	TrendingUp,
-	Check,
-	CheckCircle,
-	XCircle,
-	AlertCircle,
-	Wifi,
-	WifiOff,
-	Camera,
-	CreditCard,
-	Zap,
-	ShieldCheck,
-	Download,
-	Trash2,
+  Menu,
+  X,
+  LogOut,
+  LogIn,
+  ArrowLeft,
+  Calendar,
+  Clock,
+  MapPin,
+  Users,
+  BarChart3,
+  TrendingUp,
+  Check,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Wifi,
+  WifiOff,
+  Camera,
+  CreditCard,
+  Zap,
+  ShieldCheck,
+  Download,
+  Trash2,
+  Radar,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
@@ -134,17 +140,19 @@ export default function EventDetailsPage() {
 	const scanTimerRef = useRef(null);
 	const resetTimerRef = useRef(null);
 
-	const [cameraReady, setCameraReady] = useState(false);
-	const [cameraError, setCameraError] = useState("");
-	const [isScanning, setIsScanning] = useState(false);
-	const [scanStatus, setScanStatus] = useState("idle"); // idle | scanning | verified | rejected | already_done
-	const [scanResult, setScanResult] = useState(null);
-	const [checkedInFaceIds, setCheckedInFaceIds] = useState(new Set());
-	const [attendees, setAttendees] = useState([]);
-	const [registeredParticipants, setRegisteredParticipants] = useState([]);
-	const [showDeleteModal, setShowDeleteModal] = useState(false);
-	const [isDeleting, setIsDeleting] = useState(false);
-	const rfidInput = useRef(null);
+const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanStatus, setScanStatus] = useState("idle");
+  const [scanResult, setScanResult] = useState(null);
+  const [checkedInFaceIds, setCheckedInFaceIds] = useState(new Set());
+  const [attendees, setAttendees] = useState([]);
+  const [registeredParticipants, setRegisteredParticipants] = useState([]);
+  const [geofenceCenter, setGeofenceCenter] = useState({ lat: null, lng: null });
+  const [geofenceAttendees, setGeofenceAttendees] = useState([]);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const rfidInput = useRef(null);
 
 	useEffect(() => {
 		const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -577,38 +585,50 @@ export default function EventDetailsPage() {
 						{/* Tabs */}
 					<div className="flex gap-2 border-b" style={{ borderColor: "var(--border-subtle)" }}>
 						{[
-							{ id: "overview", label: "Overview", icon: Calendar },
-							{ id: "unified-scanner", label: "Quick Scan", icon: Zap },
-							{ id: "registered", label: "Registered", icon: Users },
-							{ id: "attendance", label: "Attendees", icon: CheckCircle },
-							{ id: "analytics", label: "Analytics", icon: TrendingUp },
-						].map((tab) => (
-							<button
-								key={tab.id}
-								onClick={() => setActiveTab(tab.id)}
-								className={`px-4 py-3 font-medium text-sm transition flex items-center gap-2 ${
-									activeTab === tab.id ? "border-b-2" : ""
-								}`}
-								style={{
-									color: activeTab === tab.id ? "#3b82f6" : "var(--text-muted)",
-									borderBottomColor: activeTab === tab.id ? "#3b82f6" : "transparent",
-								}}
-							>
-								<tab.icon size={16} />
-								{tab.label}
-								{tab.id === "unified-scanner" && (
-									<span
-										className="rounded-full px-2 py-0.5 text-xs font-bold"
-										style={{
-											backgroundColor: "rgba(59, 130, 246, 0.15)",
-											color: "#3b82f6",
-										}}
-									>
-										FAST
-									</span>
-								)}
-							</button>
-						))}
+              { id: "overview", label: "Overview", icon: Calendar },
+              { id: "unified-scanner", label: "Quick Scan", icon: Zap },
+              { id: "registered", label: "Registered", icon: Users },
+              { id: "attendance", label: "Attendees", icon: CheckCircle },
+              { id: "analytics", label: "Analytics", icon: TrendingUp },
+              ...(eventData?.with_Geo ? [{ id: "geofence", label: "Geofence", icon: Radar }] : []),
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-3 font-medium text-sm transition flex items-center gap-2 ${
+                  activeTab === tab.id ? "border-b-2" : ""
+                }`}
+                style={{
+                  color: activeTab === tab.id ? "#3b82f6" : "var(--text-muted)",
+                  borderBottomColor: activeTab === tab.id ? "#3b82f6" : "transparent",
+                }}
+              >
+                <tab.icon size={16} />
+                {tab.label}
+                {tab.id === "unified-scanner" && (
+                  <span
+                    className="rounded-full px-2 py-0.5 text-xs font-bold"
+                    style={{
+                      backgroundColor: "rgba(59, 130, 246, 0.15)",
+                      color: "#3b82f6",
+                    }}
+                  >
+                    FAST
+                  </span>
+                )}
+                {tab.id === "geofence" && (
+                  <span
+                    className="rounded-full px-2 py-0.5 text-xs font-bold"
+                    style={{
+                      backgroundColor: "rgba(16, 185, 129, 0.15)",
+                      color: "#10b981",
+                    }}
+                  >
+                    ACTIVE
+                  </span>
+                )}
+              </button>
+            ))}
 					</div>
 
 					{activeTab === "overview" && (
@@ -1223,6 +1243,65 @@ export default function EventDetailsPage() {
 											%
 										</p>
 									</div>
+								</div>
+							</section>
+						)}
+
+						{/* Geofence Tab */}
+						{activeTab === "geofence" && eventData?.with_Geo && (
+							<section
+								className="rounded-lg border p-6"
+								style={{
+									backgroundColor: "var(--surface)",
+									borderColor: "var(--border-subtle)",
+								}}
+							>
+								<h2 className="mb-4 text-lg font-semibold flex items-center gap-2" style={{ color: "var(--foreground)" }}>
+									<Radar size={20} />
+									Geofence Attendance Tracking
+								</h2>
+
+								<div className="space-y-4">
+									<div>
+										<p className="text-sm mb-2" style={{ color: "var(--text-muted)" }}>
+											Geofence Location: {eventData.venue_name}
+										</p>
+										<LocationPickerMap
+											radius={eventData.geofence_radius || 100}
+											initialLocation={eventData.latitude && eventData.longitude ? { lat: eventData.latitude, lng: eventData.longitude } : { lat: 7.0731, lng: 125.6128 }}
+											readonly={true}
+										/>
+									</div>
+
+									<div className="grid gap-4 md:grid-cols-3">
+										<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Geofence Radius</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "#3b82f6" }}>{eventData.geofence_radius || 100}m</p>
+										</div>
+										<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Participants Inside</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "#10b981" }}>{geofenceAttendees.length}</p>
+										</div>
+										<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Total Registered</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "var(--foreground)" }}>{registeredParticipants.length}</p>
+										</div>
+									</div>
+
+									<button
+										onClick={() => {
+											if ("geolocation" in navigator) {
+												navigator.geolocation.getCurrentPosition((position) => {
+													alert(`Your location: ${position.coords.latitude}, ${position.coords.longitude}\n\nCheck if you're within the geofence to check in.`);
+												});
+											}
+										}}
+										className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+										style={{ backgroundColor: "#3b82f6" }}
+									>
+										<MapPin size={16} />
+										Check My Location
+									</button>
 								</div>
 							</section>
 						)}
