@@ -25,6 +25,7 @@ import {
 	ClipboardList,
 	SlidersHorizontal,
 	User,
+	Trash2,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
@@ -162,11 +163,57 @@ export default function OrgDashboard() {
 		window.location.href = "/login";
 	};
 
+	const handleDeleteEvent = async () => {
+		if (!eventToDelete) return;
+
+		setIsDeleting(true);
+		const eventIdToDelete = eventToDelete.event_id;
+		const eventNameToDelete = eventToDelete.event_name;
+		const eventIdStr = String(eventIdToDelete);
+
+		try {
+			// Call API route with service role to bypass RLS
+			const response = await fetch("/api/admin/events", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ action: "delete", id: eventIdToDelete }),
+			});
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				alert("Failed to delete event: " + (result.error?.message || "Unknown error"));
+			} else {
+				setMyEvents((prev) => prev.filter((e) => String(e.event_id) !== eventIdStr));
+				setActiveEvents((prev) => prev.filter((e) => String(e.id) !== eventIdStr));
+				if (selectedEvent && String(selectedEvent.event_id) === eventIdStr) {
+					setSelectedEvent(null);
+					setShowModal(false);
+				}
+				setShowDeleteModal(false);
+				setEventToDelete(null);
+			}
+		} catch (error) {
+			console.error("[Delete] Exception:", error);
+			alert("Exception while deleting: " + error.message);
+		} finally {
+			setIsDeleting(false);
+		}
+	};
+
+	const openDeleteModal = (event) => {
+		setEventToDelete(event);
+		setShowDeleteModal(true);
+	};
+
 	const [activeEvents, setActiveEvents] = useState([]);
 	const [stats, setStats] = useState({ activeEvents: 0, totalParticipants: 0, avgAttendance: 0, verifiedUsers: 0 });
 	const [myEvents, setMyEvents] = useState([]);
 	const [selectedEvent, setSelectedEvent] = useState(null);
 	const [showModal, setShowModal] = useState(false);
+	const [showDeleteModal, setShowDeleteModal] = useState(false);
+	const [eventToDelete, setEventToDelete] = useState(null);
+	const [isDeleting, setIsDeleting] = useState(false);
 	const [attendanceStats, setAttendanceStats] = useState({ onPremise: 0, online: 0, geofenceActive: false });
 
 	useEffect(() => {
@@ -620,6 +667,20 @@ export default function OrgDashboard() {
 													Check Out
 												</button>
 											</div>
+											<button
+												onClick={() => {
+													openDeleteModal(selectedEvent);
+												}}
+												className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition hover:opacity-90"
+												style={{
+													backgroundColor: "rgba(239, 68, 68, 0.1)",
+													color: "#ef4444",
+													border: "1px solid rgba(239, 68, 68, 0.3)",
+												}}
+											>
+												<Trash2 size={18} />
+												Delete Event
+											</button>
 										</div>
 									</div>
 								</div>
@@ -735,6 +796,61 @@ export default function OrgDashboard() {
 					</div>
 				</main>
 			</div>
+
+			{/* Delete Confirmation Modal */}
+			{showDeleteModal && eventToDelete && (
+				<div
+					className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+					onClick={() => setShowDeleteModal(false)}
+				>
+					<div
+						className="rounded-lg border max-w-md w-full p-6"
+						style={{
+							backgroundColor: "var(--surface)",
+							borderColor: "var(--border-subtle)",
+						}}
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="flex items-center gap-3 mb-4">
+							<div
+								className="rounded-full p-2"
+								style={{ backgroundColor: "rgba(239, 68, 68, 0.1)" }}
+							>
+								<Trash2 size={24} style={{ color: "#ef4444" }} />
+							</div>
+							<h2 className="text-xl font-bold" style={{ color: "var(--foreground)" }}>
+								Delete Event
+							</h2>
+						</div>
+						<p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
+							Are you sure you want to delete <strong style={{ color: "var(--foreground)" }}>{eventToDelete.event_name}</strong>? This action cannot be undone. All associated data including registrations and attendance records will be permanently removed.
+						</p>
+						<div className="flex gap-3 justify-end">
+							<button
+								onClick={() => setShowDeleteModal(false)}
+								disabled={isDeleting}
+								className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-80"
+								style={{
+									backgroundColor: "var(--surface-soft)",
+									color: "var(--foreground)",
+								}}
+							>
+								Cancel
+							</button>
+							<button
+								onClick={handleDeleteEvent}
+								disabled={isDeleting}
+								className="rounded-lg px-4 py-2 font-semibold text-sm text-white transition hover:opacity-90"
+								style={{
+									backgroundColor: "#ef4444",
+								}}
+							>
+								{isDeleting ? "Deleting..." : "Delete Event"}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

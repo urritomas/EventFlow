@@ -39,6 +39,10 @@ export async function POST(req) {
     const idKey = await detectIdKey();
 
     if (action === 'delete') {
+      // Delete related records first (cascade delete)
+      await supabase.from('attendance').delete().eq(idKey, id);
+      await supabase.from('event_participants').delete().eq(idKey, id);
+
       const { data, error } = await supabase.from('events').delete().eq(idKey, id).select();
       if (error) return NextResponse.json({ error }, { status: 500 });
       return NextResponse.json({ data });

@@ -27,6 +27,7 @@ import {
 	Zap,
 	ShieldCheck,
 	Download,
+	Trash2,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
@@ -141,6 +142,8 @@ export default function EventDetailsPage() {
 	const [checkedInFaceIds, setCheckedInFaceIds] = useState(new Set());
 	const [attendees, setAttendees] = useState([]);
 	const [registeredParticipants, setRegisteredParticipants] = useState([]);
+	const [showDeleteModal, setShowDeleteModal] = useState(false);
+	const [isDeleting, setIsDeleting] = useState(false);
 	const rfidInput = useRef(null);
 
 	useEffect(() => {
@@ -203,6 +206,34 @@ export default function EventDetailsPage() {
 		localStorage.removeItem("userRole");
 		setSidebarOpen(false);
 		window.location.href = "/login";
+	};
+
+	const handleDeleteEvent = async () => {
+		if (!eventData) return;
+
+		setIsDeleting(true);
+		try {
+			// Call API route with service role to bypass RLS
+			const response = await fetch("/api/admin/events", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ action: "delete", id: eventId }),
+			});
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				alert("Failed to delete event: " + (result.error?.message || "Unknown error"));
+			} else {
+				router.push("/orgDashboard");
+			}
+		} catch (error) {
+			console.error("Delete error:", error);
+			alert("Exception while deleting: " + error.message);
+		} finally {
+			setIsDeleting(false);
+			setShowDeleteModal(false);
+		}
 	};
 
 	// Auto-start camera when unified-scanner tab opens
@@ -460,6 +491,18 @@ export default function EventDetailsPage() {
 								{mode === "checkout" ? "Check Out" : "Check In"} Mode
 							</p>
 						</div>
+						<button
+							onClick={() => setShowDeleteModal(true)}
+							className="flex items-center gap-2 rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+							style={{
+								backgroundColor: "rgba(239, 68, 68, 0.1)",
+								color: "#ef4444",
+								border: "1px solid rgba(239, 68, 68, 0.3)",
+							}}
+						>
+							<Trash2 size={16} />
+							Delete Event
+						</button>
 						</div>
 						<button
 							onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -1182,6 +1225,61 @@ export default function EventDetailsPage() {
 									</div>
 								</div>
 							</section>
+						)}
+
+						{/* Delete Confirmation Modal */}
+						{showDeleteModal && eventData && (
+							<div
+								className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+								onClick={() => setShowDeleteModal(false)}
+							>
+								<div
+									className="rounded-lg border max-w-md w-full p-6"
+									style={{
+										backgroundColor: "var(--surface)",
+										borderColor: "var(--border-subtle)",
+									}}
+									onClick={(e) => e.stopPropagation()}
+								>
+									<div className="flex items-center gap-3 mb-4">
+										<div
+											className="rounded-full p-2"
+											style={{ backgroundColor: "rgba(239, 68, 68, 0.1)" }}
+										>
+											<Trash2 size={24} style={{ color: "#ef4444" }} />
+										</div>
+										<h2 className="text-xl font-bold" style={{ color: "var(--foreground)" }}>
+											Delete Event
+										</h2>
+									</div>
+									<p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
+										Are you sure you want to delete <strong style={{ color: "var(--foreground)" }}>{eventData.event_name}</strong>? This action cannot be undone. All associated data including registrations and attendance records will be permanently removed.
+									</p>
+									<div className="flex gap-3 justify-end">
+										<button
+											onClick={() => setShowDeleteModal(false)}
+											disabled={isDeleting}
+											className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-80"
+											style={{
+												backgroundColor: "var(--surface-soft)",
+												color: "var(--foreground)",
+											}}
+										>
+											Cancel
+										</button>
+										<button
+											onClick={handleDeleteEvent}
+											disabled={isDeleting}
+											className="rounded-lg px-4 py-2 font-semibold text-sm text-white transition hover:opacity-90"
+											style={{
+												backgroundColor: "#ef4444",
+											}}
+										>
+											{isDeleting ? "Deleting..." : "Delete Event"}
+										</button>
+									</div>
+								</div>
+							</div>
 						)}
 					</div>
 				</main>
