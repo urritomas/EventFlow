@@ -482,12 +482,12 @@ export default function OrgDashboard() {
 												</span>
 												<div className="flex items-center gap-2">
 													{event.with_Geo && (
-														<button
+														<span
 															onClick={(e) => {
 																e.stopPropagation();
 																router.push(`/orgDashboard/event/${event.event_id}`);
 															}}
-															className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold transition hover:opacity-90"
+															className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold cursor-pointer transition hover:opacity-90"
 															style={{
 																backgroundColor: "rgba(16, 185, 129, 0.15)",
 																color: "#10b981",
@@ -495,7 +495,7 @@ export default function OrgDashboard() {
 														>
 															<MapPin size={12} />
 															Geofence
-														</button>
+														</span>
 													)}
 													<ChevronRight size={16} style={{ color: "var(--text-muted)" }} />
 												</div>

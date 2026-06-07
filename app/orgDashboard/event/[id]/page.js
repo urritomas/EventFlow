@@ -1292,8 +1292,29 @@ const [cameraReady, setCameraReady] = useState(false);
 										onClick={() => {
 											if ("geolocation" in navigator) {
 												navigator.geolocation.getCurrentPosition((position) => {
-													alert(`Your location: ${position.coords.latitude}, ${position.coords.longitude}\n\nCheck if you're within the geofence to check in.`);
+													const userLat = position.coords.latitude;
+													const userLng = position.coords.longitude;
+													const centerLat = eventData.latitude || 7.0731;
+													const centerLng = eventData.longitude || 125.6128;
+													const radius = eventData.geofence_radius || 100;
+													
+													const R = 6371e3;
+													const dLat = (userLat - centerLat) * Math.PI / 180;
+													const dLng = (userLng - centerLng) * Math.PI / 180;
+													const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+													          Math.cos(centerLat * Math.PI / 180) * Math.cos(userLat * Math.PI / 180) *
+													          Math.sin(dLng/2) * Math.sin(dLng/2);
+													const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+													const distance = R * c;
+													
+													const isInside = distance <= radius;
+													
+													alert(`Your Location:\n${userLat.toFixed(6)}, ${userLng.toFixed(6)}\n\nDistance from venue: ${Math.round(distance)}m\nGeofence radius: ${radius}m\n\nStatus: ${isInside ? "✓ INSIDE the geofence - You can check in!" : "✗ OUTSIDE the geofence - Move closer to the venue"}`);
+												}, (error) => {
+													alert("Could not get your location. Please enable location permissions in your browser.");
 												});
+											} else {
+												alert("Geolocation is not supported by your browser.");
 											}
 										}}
 										className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
