@@ -40,6 +40,7 @@ export default function AttendanceScannerPage() {
 
   const videoRef      = useRef(null);
   const canvasRef     = useRef(null);
+  const rfidInput     = useRef(null);
   const streamRef     = useRef(null);
   const scanTimerRef  = useRef(null);
   const resetTimerRef = useRef(null);

@@ -296,7 +296,6 @@ export default function PersonalDashboard() {
 	const [profileData, setProfileData] = useState({
 		fullName: "",
 		email: "",
-		idNumber: "",
 		phone: "",
 	});
 	const [isSavingProfile, setIsSavingProfile] = useState(false);
@@ -324,37 +323,39 @@ export default function PersonalDashboard() {
 	const handleRegisterEvent = async () => {
 		if (!participantId) {
 			setRegistrationMessage("Error: Setting up participant profile. Please refresh and try again.");
-			console.error("ParticipantId is null. Email:", localStorage.getItem("email"));
+			console.error("[Register] ParticipantId is null. Email:", localStorage.getItem("email"));
 			return;
 		}
 
 		setIsRegistering(true);
-		
+
 		try {
 			const supabase = createClient();
-			const { error } = await supabase
+			const { data, error } = await supabase
 				.from("event_participants")
 				.insert({
 					event_id: selectedEvent.event_id,
 					participant_id: participantId,
 					registered_at: new Date().toISOString(),
-				});
+				})
+				.select("*");
+
+			console.log("[Register] insert result:", { data, error, eventId: selectedEvent?.event_id, participantId });
 
 			if (error) {
-				console.error("Registration error:", error);
+				console.error("[Register] Registration error:", error);
 				setRegistrationMessage("Error: " + error.message);
 			} else {
 				setIsRegistered(true);
 				setShowRFIDStep(true);
 				setRegistrationMessage("✓ Event registration submitted! Now register your RFID card.");
-				
-				// Update the registered events list immediately
+
 				const newRegisteredIds = new Set(userRegisteredEventIds);
 				newRegisteredIds.add(selectedEvent.event_id);
 				setUserRegisteredEventIds(newRegisteredIds);
 			}
 		} catch (error) {
-			console.error("Catch error:", error);
+			console.error("[Register] Catch error:", error);
 			setRegistrationMessage("Error: " + error.message);
 		} finally {
 			setIsRegistering(false);
@@ -646,55 +647,51 @@ export default function PersonalDashboard() {
 
 				console.log("Loading profile for loginId:", loginId);
 
-				// First set the login info immediately
 				setProfileData(prev => ({
 					...prev,
 					fullName: `${firstName} ${lastName}`.trim(),
 					email: email,
 				}));
 
-				// Then fetch the phone and id_number from database
-				if (loginId) {
-					const supabase = createClient();
-					const { data: loginUserArray, error } = await supabase
-						.from("login_details")
-						.select("phone, id_number")
-						.eq("login_id", parseInt(loginId, 10));
+				if (!loginId) {
+					console.warn("No loginId in localStorage");
+					return;
+				}
 
-					console.log("Database query result:", { data: loginUserArray, error });
+				const supabase = createClient();
+				const { data: loginUserArray, error } = await supabase
+					.from("login_details")
+					.select("phone")
+					.eq("login_id", parseInt(loginId, 10));
 
-					if (error) {
-						console.error("Error fetching profile:", error);
-					} else if (loginUserArray && loginUserArray.length > 0) {
-						const loginUser = loginUserArray[0];
-						const idNum = loginUser.id_number ? String(loginUser.id_number) : "";
-						const phoneNum = loginUser.phone ? String(loginUser.phone) : "";
-						
-						console.log("Setting profile data:", { idNum, phoneNum });
-						
-						setProfileData(prev => ({
-							...prev,
-							idNumber: idNum,
-							phone: phoneNum,
-						}));
-						
-						// Fetch RFID code from participants table
-						const supabaseForRFID = createClient();
-						const { data: participantData } = await supabaseForRFID
-							.from("participants")
-							.select("rfid")
-							.eq("email", email)
-							.single();
-						
-						if (participantData?.rfid) {
-							setRegisteredRFID(participantData.rfid);
-							console.log("Found registered RFID:", participantData.rfid);
-						}
-					} else {
-						console.warn("No data returned from database");
+				console.log("Database query result:", { data: loginUserArray, error });
+
+				if (error) {
+					console.error("Error fetching profile:", error);
+				} else if (loginUserArray && loginUserArray.length > 0) {
+					const loginUser = loginUserArray[0];
+					const phoneNum = loginUser.phone ? String(loginUser.phone) : "";
+					
+					console.log("Setting profile data:", { phoneNum });
+					
+					setProfileData(prev => ({
+						...prev,
+						phone: phoneNum,
+					}));
+					
+					const supabaseForRFID = createClient();
+					const { data: participantData } = await supabaseForRFID
+						.from("participants")
+						.select("rfid")
+						.eq("email", email)
+						.single();
+					
+					if (participantData?.rfid) {
+						setRegisteredRFID(participantData.rfid);
+						console.log("Found registered RFID:", participantData.rfid);
 					}
 				} else {
-					console.warn("No loginId in localStorage");
+					console.warn("No data returned from database");
 				}
 			} catch (error) {
 				console.error("Error loading profile data:", error);
@@ -730,18 +727,7 @@ export default function PersonalDashboard() {
 			// Build update object for login_details
 			const updateData = {};
 
-			// Handle id_number
-			const idStr = profileData.idNumber.trim();
-			if (idStr) {
-				const idNum = parseInt(idStr, 10);
-				if (!isNaN(idNum)) {
-					updateData.id_number = idNum;
-				}
-			} else {
-				updateData.id_number = null;
-			}
-
-			// Handle phone - convert to integer if value exists
+			// Handle phone
 			const phoneStr = profileData.phone.trim();
 			if (phoneStr) {
 				const digitsOnly = phoneStr.replace(/\D/g, '');
@@ -909,24 +895,6 @@ export default function PersonalDashboard() {
 													borderColor: "var(--border-subtle)",
 													color: "var(--text-muted)",
 													cursor: "not-allowed",
-												}}
-											/>
-										</div>
-										<div>
-											<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
-												ID Number
-											</label>
-											<input
-												type="text"
-												name="idNumber"
-												value={profileData.idNumber}
-												onChange={handleProfileChange}
-												placeholder="Enter your ID number"
-												className="w-full rounded-lg border px-3 py-2 text-sm"
-												style={{
-													backgroundColor: "var(--page-bg)",
-													borderColor: "var(--border-subtle)",
-													color: "var(--foreground)",
 												}}
 											/>
 										</div>

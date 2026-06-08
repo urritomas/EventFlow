@@ -382,86 +382,194 @@ const [cameraReady, setCameraReady] = useState(false);
 		setScanStatus("idle");
 	};
 
+	const getAttendeeStatus = (attendee) => {
+		if (!eventData) return "Not Checked In";
+
+		const records = attendees.filter((a) => a.participant_id === attendee.participant_id);
+		if (!records.length) return "Not Checked In";
+
+		const methods = new Set(records.map((r) => r.verification_method).filter(Boolean));
+		const requiresFace = Boolean(eventData.with_FaceId);
+		const requiresRFID = Boolean(eventData.with_RFID);
+
+		if (requiresFace && requiresRFID) {
+			const hasFace = methods.has("face");
+			const hasRFID = methods.has("rfid");
+			if (hasFace && hasRFID) return "Fully Checked In";
+			if (hasFace || hasRFID) return "Partially Checked In";
+			return "Not Checked In";
+		}
+
+		if (requiresFace) {
+			return methods.has("face") ? "Fully Checked In" : "Not Checked In";
+		}
+
+		if (requiresRFID) {
+			return methods.has("rfid") ? "Fully Checked In" : "Not Checked In";
+		}
+
+		return records.some((r) => r.check_in_time) ? "Checked In" : "Not Checked In";
+	};
+
 	const handleRFIDScan = async (e) => {
 		const value = rfidInput.current?.value?.trim();
-		if (e.key === "Enter" && value) {
-			try {
-				const supabase = createClient();
-				const { data: registration } = await supabase
-					.from("event_participants")
-					.select("*, participants(*)")
-					.eq("reg_rfid", value)
-					.eq("event_id", eventId)
-					.single();
+		if (!e || e.key !== "Enter" || !value) return;
 
-				const participant = registration?.participants || null;
+		const supabase = createClient();
+		setScanResult(null);
 
-				if (participant) {
-					if (mode === "checkout") {
-						const { data: existingAttendance } = await supabase
-							.from("attendance")
-							.select("*")
-							.eq("event_id", eventId)
-							.eq("participant_id", participant.participant_id)
-							.eq("check_out_time", null)
-							.single();
+		try {
+			const trimmed = value.trim();
+			const normalized = trimmed.toUpperCase();
 
-						if (existingAttendance) {
-							const { error: updateError } = await supabase
-								.from("attendance")
-								.update({
-									check_out_time: new Date().toISOString(),
-									check_out_verified: true,
-									check_out_method: "rfid",
-								})
-								.eq("attendance_id", existingAttendance.attendance_id);
+			let participant = null;
+			let source = null;
 
-							if (!updateError) {
-								setScanResult({ success: true, message: `${participant.name} checked out!` });
-								if (rfidInput.current) rfidInput.current.value = "";
-								setTimeout(() => setScanResult(null), 3000);
-								const { data: newAttendees } = await supabase
-									.from("attendance")
-									.select("*, participants(*)")
-									.eq("event_id", eventId);
-								if (newAttendees) setAttendees(newAttendees);
-							} else {
-								setScanResult({ success: false, message: "Error recording checkout" });
-								setTimeout(() => setScanResult(null), 3000);
-							}
-						} else {
-							setScanResult({ success: false, message: "No active check-in found" });
-							setTimeout(() => setScanResult(null), 3000);
-						}
-					} else {
-						const { error } = await supabase.from("attendance").insert({
-							event_id: eventId,
-							participant_id: participant.participant_id,
-							check_in_time: new Date().toISOString(),
-							verified: false,
-							verification_method: "rfid",
-							source_rfid: value,
-						});
+			const { data: exact } = await supabase
+				.from("participants")
+				.select("participant_id, name, email, rfid")
+				.eq("rfid", trimmed)
+				.maybeSingle();
 
-						if (!error) {
-							setScanResult({ success: true, message: `RFID recognized — ${participant.name} marked Partially Checked In` });
-							if (rfidInput.current) rfidInput.current.value = "";
-							setTimeout(() => setScanResult(null), 3000);
-							const { data: newAttendees } = await supabase
-								.from("attendance")
-								.select("*, participants(*)")
-								.eq("event_id", eventId);
-							if (newAttendees) setAttendees(newAttendees);
-						}
-					}
-				} else {
-					setScanResult({ success: false, message: "RFID not recognized for this event" });
-					setTimeout(() => setScanResult(null), 3000);
+			if (exact) {
+				participant = exact;
+				source = "participants.exact";
+			} else {
+				const { data: all } = await supabase
+					.from("participants")
+					.select("participant_id, name, email, rfid")
+					.limit(2000);
+
+				const found = (all || []).find((p) => (p.rfid || "").trim().toUpperCase() === normalized) || null;
+				if (found) {
+					participant = found;
+					source = "participants.normalized";
 				}
-			} catch (error) {
-				setScanResult({ success: false, message: "Error processing scan" });
-				setTimeout(() => setScanResult(null), 3000);
 			}
+
+			if (!participant) {
+				const { data: legacy } = await supabase
+					.from("event_participants")
+					.select("participant_id, participants(participant_id, name, email, rfid)")
+					.eq("event_id", eventId)
+					.not("reg_rfid", "is", null)
+					.limit(500);
+
+				const legacyMatch = (legacy || []).find((row) => {
+					const rfidVal = row.reg_rfid;
+					const rfidStr = typeof rfidVal === "number" ? String(rfidVal) : String(rfidVal || "").trim();
+					return rfidStr.toUpperCase() === normalized;
+				});
+
+				if (legacyMatch) {
+					const p = legacyMatch.participants;
+					participant = {
+						participant_id: p?.participant_id ?? legacyMatch.participant_id,
+						name: p?.name ?? null,
+						email: p?.email ?? null,
+						rfid: null,
+					};
+					source = "event_participants.reg_rfid";
+				}
+			}
+
+			console.log("[RFID] lookup result:", { source, participantId: participant?.participant_id });
+
+			if (!participant) {
+				setScanResult({ success: false, message: "RFID not found in participants or registrations." });
+				return;
+			}
+
+			const { data: registration, error: regError } = await supabase
+				.from("event_participants")
+				.select("*")
+				.eq("event_id", eventId)
+				.eq("participant_id", participant.participant_id)
+				.maybeSingle();
+
+			console.log("[RFID] registration lookup:", { source, registration, regError, eventId, participantId: participant.participant_id });
+
+			if (!registration) {
+				console.warn("[RFID] Missing registration, bypassing for attendance:", { source, participantId: participant.participant_id, eventId });
+				setScanResult({
+					success: true,
+					message: `${participant.name || "Unknown"} not linked to event_registration but attendance recorded.`
+				});
+			}
+
+			if (mode === "checkout") {
+				const { data: existingAttendanceId } = await supabase
+					.from("attendance")
+					.select("attendance_id")
+					.eq("event_id", eventId)
+					.eq("participant_id", participant.participant_id)
+					.is("check_out_time", null)
+					.maybeSingle();
+
+				if (!existingAttendanceId) {
+					setScanResult({ success: false, message: `${participant.name} has no active check-in to close.` });
+					return;
+				}
+
+				const { error: updateError } = await supabase
+					.from("attendance")
+					.update({
+						check_out_time: new Date().toISOString(),
+						check_out_verified: true,
+						check_out_method: "rfid",
+					})
+					.eq("attendance_id", existingAttendanceId.attendance_id);
+
+				if (updateError) {
+					setScanResult({ success: false, message: "Check-out failed: " + updateError.message });
+					return;
+				}
+
+				setScanResult({ success: true, message: `${participant.name} checked out.` });
+			} else {
+				const { data: existingAttendanceId } = await supabase
+					.from("attendance")
+					.select("attendance_id")
+					.eq("event_id", eventId)
+					.eq("participant_id", participant.participant_id)
+					.maybeSingle();
+
+				if (existingAttendanceId) {
+					setScanResult({ success: true, message: `${participant.name} is already checked in.` });
+				} else {
+					const { error: insertError } = await supabase.from("attendance").insert({
+						event_id: eventId,
+						participant_id: participant.participant_id,
+						check_in_time: new Date().toISOString(),
+						verified: false,
+						verification_method: "rfid",
+						source_rfid: trimmed,
+					});
+
+					if (insertError) {
+						setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
+						return;
+					}
+
+					setScanResult({ success: true, message: `${participant.name} marked Partially Checked In.` });
+				}
+			}
+
+			const { data: newAttendees } = await supabase
+				.from("attendance")
+				.select("*, participants(participant_id, name, email)")
+				.eq("event_id", eventId)
+				.order("check_in_time", { ascending: false });
+
+			if (newAttendees) setAttendees(newAttendees);
+
+			if (rfidInput.current) {
+				rfidInput.current.value = "";
+				rfidInput.current.focus();
+			}
+		} catch (error) {
+			console.error("RFID scan error:", error);
+			setScanResult({ success: false, message: "Unexpected error during scan." });
 		}
 	};
 
@@ -810,9 +918,9 @@ const [cameraReady, setCameraReady] = useState(false);
 								<div className="flex items-center justify-between mb-4">
 									<h2 className="text-lg font-semibold flex items-center gap-2" style={{ color: "var(--foreground)" }}>
 										<ShieldCheck size={20} />
-										Quick Attendance Scan
+										{mode === "checkout" ? "RFID Check Out" : "Quick Attendance Scan"}
 									</h2>
-									{eventData.with_Geo && (
+									{eventData.with_Geo && mode !== "checkout" && (
 										<span
 											className="rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1.5"
 											style={{ backgroundColor: "rgba(16, 185, 129, 0.1)", color: "#10b981" }}
@@ -823,157 +931,209 @@ const [cameraReady, setCameraReady] = useState(false);
 								</div>
 
 								<p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-									Face recognition runs automatically. Use RFID as quick fallback.
+									{mode === "checkout"
+										? "Scan the participant's RFID card to check them out."
+										: "Face recognition runs automatically. Use RFID as quick fallback."}
 								</p>
 
-								<div className="grid gap-4 md:grid-cols-2">
-									{/* Face Recognition Panel */}
-									{eventData.with_FaceId && (
-										<div
-											className="rounded-xl border p-4"
-											style={{ borderColor: "rgba(59, 130, 246, 0.3)" }}
-										>
-											<div className="flex items-center gap-2 mb-3">
-												<Camera size={18} style={{ color: "#3b82f6" }} />
-												<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-													Face Recognition
-												</h3>
-												<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(59, 130, 246, 0.15)", color: "#3b82f6" }}>
-													AUTO
-												</span>
-											</div>
-
-											{cameraError ? (
-												<div className="flex items-center justify-center rounded-lg bg-red-500/10 border border-red-500/30 p-4 mb-3" style={{ aspectRatio: "4/3" }}>
-													<div className="text-center">
-														<XCircle size={32} style={{ color: "#ef4444", margin: "0 auto" }} />
-														<p className="text-xs text-red-400 mt-2">{cameraError}</p>
-													</div>
+								{mode === "checkout" ? (
+									<div className="grid gap-4 md:grid-cols-2">
+										{eventData.with_RFID && (
+											<div
+												className="rounded-xl border p-4"
+												style={{ borderColor: "rgba(16, 185, 129, 0.3)" }}
+											>
+												<div className="flex items-center gap-2 mb-3">
+													<CreditCard size={18} style={{ color: "#10b981" }} />
+													<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+														RFID Check Out
+													</h3>
+													<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
+														REQUIRED
+													</span>
 												</div>
-											) : (
-												<div className={`relative rounded-lg mb-3 border-2 transition-all ${
-													scanStatus === "scanning" ? "border-yellow-400" :
-													scanStatus === "verified" ? "border-emerald-400" :
-													scanStatus === "rejected" ? "border-red-400" :
-													"border-blue-400/50"
-												}`} style={{ aspectRatio: "4/3" }}>
-													<video
-														ref={videoRef}
-														autoPlay
-														playsInline
-														muted
-														className="w-full h-full rounded-lg object-cover"
-														style={{ backgroundColor: "#000" }}
-													/>
-													<canvas ref={canvasRef} style={{ display: "none" }} />
-
-													{/* Status overlay */}
-													<div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 flex items-center justify-center gap-2">
-														{scanStatus === "scanning" && <div className="h-2.5 w-2.5 animate-ping rounded-full bg-yellow-400" />}
-														{scanStatus === "verified" && <CheckCircle size={14} style={{ color: "#10b981" }} />}
-														{scanStatus === "rejected" && <XCircle size={14} style={{ color: "#ef4444" }} />}
-														<span className="text-xs font-semibold" style={{
-															color: scanStatus === "scanning" ? "#fbbf24" :
-																	scanStatus === "verified" ? "#10b981" :
-																	scanStatus === "rejected" ? "#ef4444" :
-																	"#9ca3af"
-														}}>
-															{scanStatus === "idle" ? "Ready" :
-																scanStatus === "scanning" ? "Analyzing..." :
-																scanStatus === "verified" ? "Face Matched" :
-																scanStatus === "rejected" ? "Not Recognized" :
-																""}
-														</span>
-													</div>
-
-													{/* Camera startup overlay */}
-													{!cameraReady && (
-														<div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-lg">
-															<p className="text-sm text-slate-400">Initializing camera...</p>
-														</div>
-													)}
-												</div>
-											)}
-
-											{/* Result card */}
-											{scanResult && scanStatus !== "idle" && scanStatus !== "scanning" && (
-												<div className={`rounded-lg p-3 mb-3 text-xs ${
-													scanStatus === "verified"
-														? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
-														: scanStatus === "already_done"
-														? "bg-slate-500/10 border border-slate-500/30 text-slate-300"
-														: "bg-red-500/10 border border-red-500/30 text-red-300"
-												}`}>
-													{scanStatus === "verified" && (
-														<div className="flex items-center gap-2">
-															<CheckCircle size={14} />
-															<span>✓ {scanResult.name} checked in</span>
-														</div>
-													)}
-													{scanStatus === "already_done" && (
-														<div className="flex items-center gap-2">
-															<CheckCircle size={14} />
-															<span>{scanResult.name} already checked in</span>
-														</div>
-													)}
-													{scanStatus === "rejected" && (
-														<div className="flex items-center gap-2">
-															<XCircle size={14} />
-															<span>Face not recognized (${(scanResult.similarity * 100).toFixed(0)}%)</span>
-														</div>
-													)}
-												</div>
-											)}
-
-											<div className="flex items-center justify-between text-xs">
-												<span style={{ color: cameraReady ? "#10b981" : "var(--text-muted)" }}>
-													{cameraReady ? "Camera active • Auto-scanning" : "Starting camera..."}
-												</span>
-												{cameraReady && (
-													<button
-														onClick={stopCamera}
-														className="px-3 py-1.5 rounded-full text-xs font-semibold transition"
+												{scanResult && (
+													<div
+														className="mb-3 p-2.5 rounded-lg flex items-center gap-2 text-xs"
 														style={{
-															backgroundColor: "rgba(239, 68, 68, 0.15)",
-															color: "#ef4444",
+															backgroundColor: scanResult.success
+																? "rgba(16, 185, 129, 0.1)"
+																: "rgba(239, 68, 68, 0.1)",
+															color: scanResult.success ? "#10b981" : "#ef4444",
 														}}
 													>
-														Stop
-													</button>
+														{scanResult.success ? <CheckCircle size={16} /> : <XCircle size={16} />}
+														<p>{scanResult.message}</p>
+													</div>
 												)}
-											</div>
-										</div>
-									)}
-
-									{/* RFID Scanner Panel */}
-									{eventData.with_RFID && (
-										<div
-											className="rounded-xl border p-4"
-											style={{ borderColor: "rgba(16, 185, 129, 0.3)" }}
-										>
-											<div className="flex items-center gap-2 mb-3">
-												<CreditCard size={18} style={{ color: "#10b981" }} />
-												<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-													RFID Scanner
-												</h3>
-												<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
-													FALLBACK
-												</span>
-											</div>
-											{scanResult && (
-												<div
-													className="mb-3 p-2.5 rounded-lg flex items-center gap-2 text-xs"
+												<input
+													type="text"
+													ref={rfidInput}
+													onKeyPress={handleRFIDScan}
+													placeholder="Scan RFID card here or type..."
+													autoFocus
+												className="w-full rounded-lg border px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2"
 													style={{
-														backgroundColor: scanResult.success
-															? "rgba(16, 185, 129, 0.1)"
-															: "rgba(239, 68, 68, 0.1)",
-														color: scanResult.success ? "#10b981" : "#ef4444",
+														backgroundColor: "var(--page-bg)",
+														borderColor: "var(--border-subtle)",
+														color: "var(--foreground)",
 													}}
-												>
-													{scanResult.success ? <CheckCircle size={16} /> : <XCircle size={16} />}
-													<p>{scanResult.message}</p>
+												/>
+												<p className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+													Press Enter when scanned
+												</p>
+											</div>
+										)}
+									</div>
+								) : (
+									<div className="grid gap-4 md:grid-cols-2">
+										{/* Face Recognition Panel */}
+										{eventData.with_FaceId && (
+											<div
+												className="rounded-xl border p-4"
+												style={{ borderColor: "rgba(59, 130, 246, 0.3)" }}
+											>
+												<div className="flex items-center gap-2 mb-3">
+													<Camera size={18} style={{ color: "#3b82f6" }} />
+													<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+														Face Recognition
+													</h3>
+													<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(59, 130, 246, 0.15)", color: "#3b82f6" }}>
+														AUTO
+													</span>
 												</div>
-											)}
+
+												{cameraError ? (
+													<div className="flex items-center justify-center rounded-lg bg-red-500/10 border border-red-500/30 p-4 mb-3" style={{ aspectRatio: "4/3" }}>
+														<div className="text-center">
+															<XCircle size={32} style={{ color: "#ef4444", margin: "0 auto" }} />
+															<p className="text-xs text-red-400 mt-2">{cameraError}</p>
+														</div>
+													</div>
+												) : (
+													<div className={`relative rounded-lg mb-3 border-2 transition-all ${
+														scanStatus === "scanning" ? "border-yellow-400" :
+														scanStatus === "verified" ? "border-emerald-400" :
+														scanStatus === "rejected" ? "border-red-400" :
+														"border-blue-400/50"
+													}`} style={{ aspectRatio: "4/3" }}>
+														<video
+															ref={videoRef}
+															autoPlay
+															playsInline
+															muted
+															className="w-full h-full rounded-lg object-cover"
+															style={{ backgroundColor: "#000" }}
+														/>
+														<canvas ref={canvasRef} style={{ display: "none" }} />
+
+														{/* Status overlay */}
+														<div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 flex items-center justify-center gap-2">
+															{scanStatus === "scanning" && <div className="h-2.5 w-2.5 animate-ping rounded-full bg-yellow-400" />}
+															{scanStatus === "verified" && <CheckCircle size={14} style={{ color: "#10b981" }} />}
+															{scanStatus === "rejected" && <XCircle size={14} style={{ color: "#ef4444" }} />}
+															<span className="text-xs font-semibold" style={{
+																color: scanStatus === "scanning" ? "#fbbf24" :
+																		scanStatus === "verified" ? "#10b981" :
+																		scanStatus === "rejected" ? "#ef4444" :
+																		"#9ca3af"
+															}}>
+																{scanStatus === "idle" ? "Ready" :
+																	scanStatus === "scanning" ? "Analyzing..." :
+																	scanStatus === "verified" ? "Face Matched" :
+																	scanStatus === "rejected" ? "Not Recognized" :
+																	""}
+															</span>
+														</div>
+
+														{/* Camera startup overlay */}
+														{!cameraReady && (
+															<div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-lg">
+																<p className="text-sm text-slate-400">Initializing camera...</p>
+															</div>
+														)}
+													</div>
+												)}
+
+												{/* Result card */}
+												{scanResult && scanStatus !== "idle" && scanStatus !== "scanning" && (
+													<div className={`rounded-lg p-3 mb-3 text-xs ${
+														scanStatus === "verified"
+															? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
+															: scanStatus === "already_done"
+															? "bg-slate-500/10 border border-slate-500/30 text-slate-300"
+															: "bg-red-500/10 border border-red-500/30 text-red-300"
+													}`}>
+														{scanStatus === "verified" && (
+															<div className="flex items-center gap-2">
+																<CheckCircle size={14} />
+																<span>✓ {scanResult.name} checked in</span>
+															</div>
+														)}
+														{scanStatus === "already_done" && (
+															<div className="flex items-center gap-2">
+																<CheckCircle size={14} />
+																<span>{scanResult.name} already checked in</span>
+															</div>
+														)}
+														{scanStatus === "rejected" && (
+															<div className="flex items-center gap-2">
+																<XCircle size={14} />
+																<span>Face not recognized (${(scanResult.similarity * 100).toFixed(0)}%)</span>
+															</div>
+														)}
+													</div>
+												)}
+
+												<div className="flex items-center justify-between text-xs">
+													<span style={{ color: cameraReady ? "#10b981" : "var(--text-muted)" }}>
+														{cameraReady ? "Camera active • Auto-scanning" : "Starting camera..."}
+													</span>
+													{cameraReady && (
+														<button
+															onClick={stopCamera}
+															className="px-3 py-1.5 rounded-full text-xs font-semibold transition"
+															style={{
+																backgroundColor: "rgba(239, 68, 68, 0.15)",
+																color: "#ef4444",
+															}}
+														>
+															Stop
+														</button>
+													)}
+												</div>
+											</div>
+										)}
+
+										{/* RFID Scanner Panel */}
+										{eventData.with_RFID && (
+											<div
+												className="rounded-xl border p-4"
+												style={{ borderColor: "rgba(16, 185, 129, 0.3)" }}
+											>
+												<div className="flex items-center gap-2 mb-3">
+													<CreditCard size={18} style={{ color: "#10b981" }} />
+													<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+														RFID Scanner
+													</h3>
+													<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
+														FALLBACK
+													</span>
+												</div>
+												{scanResult && (
+													<div
+														className="mb-3 p-2.5 rounded-lg flex items-center gap-2 text-xs"
+														style={{
+															backgroundColor: scanResult.success
+																? "rgba(16, 185, 129, 0.1)"
+																: "rgba(239, 68, 68, 0.1)",
+															color: scanResult.success ? "#10b981" : "#ef4444",
+														}}
+													>
+														{scanResult.success ? <CheckCircle size={16} /> : <XCircle size={16} />}
+														<p>{scanResult.message}</p>
+													</div>
+												)}
 										<input
 											type="text"
 											ref={rfidInput}
@@ -987,19 +1147,12 @@ const [cameraReady, setCameraReady] = useState(false);
 												color: "var(--foreground)",
 											}}
 										/>
-											<p className="text-xs" style={{ color: "var(--text-muted)" }}>
+										<p className="text-xs" style={{ color: "var(--text-muted)" }}>
 												Press Enter when scanned
 											</p>
 										</div>
-									)}
+										)}
 								</div>
-
-								{!eventData.with_FaceId && !eventData.with_RFID && (
-									<div className="text-center py-8">
-										<p style={{ color: "var(--text-muted)" }}>
-											No scanning methods enabled for this event.
-										</p>
-									</div>
 								)}
 							</section>
 						)}
@@ -1115,64 +1268,119 @@ const [cameraReady, setCameraReady] = useState(false);
 									Attendees ({attendees.length})
 								</h2>
 								<div className="overflow-x-auto">
-									<table className="w-full text-sm">
-										<thead>
-											<tr style={{ backgroundColor: "var(--surface-soft)", borderColor: "var(--border-subtle)" }} className="border-b">
-												<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-													Name
-												</th>
-												<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-													Email
-												</th>
-												<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-													Check-in Time
-												</th>
-												<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
-													Check-out Time
-												</th>
-											</tr>
-										</thead>
-										<tbody>
-											{attendees.map((attendee, idx) => (
-												<tr
-													key={idx}
-													style={{
-														backgroundColor: "var(--surface)",
-														borderColor: "var(--border-subtle)",
-													}}
-													className={idx !== attendees.length - 1 ? "border-b" : ""}
-												>
-													<td className="px-6 py-4 font-medium" style={{ color: "var(--foreground)" }}>
-														{attendee.participants?.name || "Unknown"}
-													</td>
-													<td className="px-6 py-4" style={{ color: "var(--text-muted)" }}>
-														{attendee.participants?.email || "N/A"}
-													</td>
-													<td className="px-6 py-4" style={{ color: "var(--foreground)" }}>
-														{attendee.check_in_time
-															? new Date(attendee.check_in_time).toLocaleTimeString()
-															: "-"}
-													</td>
-													<td className="px-6 py-4" style={{ color: "var(--foreground)" }}>
-														{attendee.check_out_time
-															? new Date(attendee.check_out_time).toLocaleTimeString()
-															: "-"}
-													</td>
-												</tr>
-											))}
-											{attendees.length === 0 && (
-												<tr>
-													<td
-														className="px-6 py-6 text-center text-sm"
-														style={{ color: "var(--text-muted)" }}
-														colSpan={4}
+								<table className="w-full text-sm">
+									<thead>
+										<tr style={{ backgroundColor: "var(--surface-soft)", borderColor: "var(--border-subtle)" }} className="border-b">
+											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+												Name
+											</th>
+											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+												Email
+											</th>
+											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+												Check-in Time
+											</th>
+											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+												Check-out Time
+											</th>
+											<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
+												Status
+											</th>
+										</tr>
+									</thead>
+									<tbody>
+										{(() => {
+											const sorted = [...attendees].sort((a, b) => {
+												const aTime = a.check_in_time ? new Date(a.check_in_time).getTime() : 0;
+												const bTime = b.check_in_time ? new Date(b.check_in_time).getTime() : 0;
+												return bTime - aTime;
+											});
+
+											const badge = (status) => {
+												const map = {
+													"Fully Checked In": {
+														background: "rgba(16, 185, 129, 0.15)",
+														color: "#10b981",
+														label: "Fully Checked In",
+													},
+													"Partially Checked In": {
+														background: "rgba(245, 158, 11, 0.15)",
+														color: "#f59e0b",
+														label: "Partially Checked In",
+													},
+													"Checked In": {
+														background: "rgba(16, 185, 129, 0.15)",
+														color: "#10b981",
+														label: "Checked In",
+													},
+													"Not Checked In": {
+														background: "rgba(107, 114, 128, 0.15)",
+														color: "#6b7280",
+														label: "Not Checked In",
+													},
+												};
+
+												const theme = map[status] || map["Not Checked In"];
+												return (
+													<span
+														className="rounded-full px-2.5 py-1 text-xs font-semibold"
+														style={{
+															backgroundColor: theme.background,
+															color: theme.color,
+														}}
 													>
-														No attendees recorded yet.
-													</td>
-												</tr>
-											)}
-										</tbody>
-									</table>
+														{theme.label}
+													</span>
+												);
+											};
+
+											return sorted.map((attendee, idx) => {
+												const pid = attendee.participants?.participant_id ?? attendee.participant_id;
+												const status = getAttendeeStatus(pid);
+
+												return (
+													<tr
+														key={attendee.attendance_id || idx}
+														style={{
+															backgroundColor: "var(--surface)",
+															borderColor: "var(--border-subtle)",
+														}}
+														className={idx !== sorted.length - 1 ? "border-b" : ""}
+													>
+														<td className="px-6 py-4 font-medium" style={{ color: "var(--foreground)" }}>
+															{attendee.participants?.name || "Unknown"}
+														</td>
+														<td className="px-6 py-4" style={{ color: "var(--text-muted)" }}>
+															{attendee.participants?.email || "N/A"}
+														</td>
+														<td className="px-6 py-4" style={{ color: "var(--foreground)" }}>
+															{attendee.check_in_time
+																? new Date(attendee.check_in_time).toLocaleTimeString()
+																: "-"}
+														</td>
+														<td className="px-6 py-4" style={{ color: "var(--foreground)" }}>
+															{attendee.check_out_time
+																? new Date(attendee.check_out_time).toLocaleTimeString()
+																: "-"}
+														</td>
+														<td className="px-6 py-4">{badge(status)}</td>
+													</tr>
+												);
+											});
+										})()}
+										{attendees.length === 0 && (
+											<tr>
+												<td
+													className="px-6 py-6 text-center text-sm"
+													style={{ color: "var(--text-muted)" }}
+													colSpan={5}
+												>
+													No attendees recorded yet.
+												</td>
+											</tr>
+										)}
+									</tbody>
+								</table>
 								</div>
 							</section>
 						)}
