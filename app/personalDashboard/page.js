@@ -300,6 +300,9 @@ export default function PersonalDashboard() {
 	});
 	const [isSavingProfile, setIsSavingProfile] = useState(false);
 	const [profileMessage, setProfileMessage] = useState("");
+	const [clusteringInsights, setClusteringInsights] = useState(null);
+	const [clusteringLoading, setClusteringLoading] = useState(false);
+	const [clusteringError, setClusteringError] = useState(null);
 
 	const handleViewEventDetails = async (event) => {
 		setSelectedEvent(event);
@@ -701,6 +704,37 @@ export default function PersonalDashboard() {
 		loadProfileData();
 	}, []);
 
+	const fetchClusteringInsights = async () => {
+		try {
+			setClusteringLoading(true);
+			setClusteringError(null);
+			const params = new URLSearchParams();
+			if (participantId) {
+				params.set("participantId", participantId);
+			}
+			const response = await fetch(`/api/clustering?${params.toString()}`);
+
+			if (!response.ok) {
+				const result = await response.json().catch(() => ({}));
+				throw new Error(result.details || result.error || `Clustering request failed: ${response.statusText}`);
+			}
+
+			const data = await response.json();
+			setClusteringInsights(data);
+		} catch (err) {
+			console.error("Error fetching clustering insights:", err);
+			setClusteringError(err instanceof Error ? err.message : "Unknown error occurred");
+		} finally {
+			setClusteringLoading(false);
+		}
+	};
+
+	useEffect(() => {
+		if (participantId && isAuthorized) {
+			fetchClusteringInsights();
+		}
+	}, [participantId, isAuthorized]);
+
 	const handleProfileChange = (e) => {
 		const { name, value } = e.target;
 		setProfileData(prev => ({
@@ -809,28 +843,135 @@ export default function PersonalDashboard() {
 
 						{/* Behavior Analytics */}
 						<section id="behavior" className="space-y-4">
-							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
-								Behavior & Performance
-							</h2>
-							{participantId ? (
-								<BehaviorAnalyticsCard participantId={participantId} />
-							) : (
+							<div className="flex items-center justify-between">
+								<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
+									Performance Group
+								</h2>
+								<button
+									onClick={fetchClusteringInsights}
+									disabled={clusteringLoading}
+									className="rounded-lg px-3 py-1.5 text-xs font-semibold transition hover:opacity-90 disabled:opacity-60"
+									style={{ backgroundColor: "rgba(59, 130, 246, 0.15)", color: "#3b82f6" }}
+								>
+									{clusteringLoading ? "Analyzing..." : "Re-run Analysis"}
+								</button>
+							</div>
+							{clusteringLoading && !clusteringInsights ? (
 								<div
 									className="rounded-lg border p-8"
-									style={{
-										backgroundColor: "var(--surface)",
-										borderColor: "var(--border-subtle)",
-									}}
+									style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}
 								>
 									<div className="text-center">
-										<p style={{ color: "var(--text-muted)" }} className="text-sm mb-2">
-											Behavior Analytics Not Available
-										</p>
-										<p style={{ color: "var(--text-muted)" }} className="text-xs">
-											Your behavior analytics will be available once your profile is linked to event records. Start attending events to see your behavior classification.
+										<p style={{ color: "var(--text-muted)" }} className="text-sm">
+											Running clustering analysis...
 										</p>
 									</div>
 								</div>
+							) : clusteringError ? (
+								<div
+									className="rounded-lg border p-6"
+									style={{ backgroundColor: "rgba(239, 68, 68, 0.05)", borderColor: "rgba(239, 68, 68, 0.3)" }}
+								>
+									<div className="text-center">
+										<p style={{ color: "#ef4444" }} className="text-sm">
+											{clusteringError}
+										</p>
+										<button
+											onClick={fetchClusteringInsights}
+											className="mt-3 rounded-lg px-4 py-2 text-xs font-semibold"
+											style={{ backgroundColor: "#ef4444", color: "white" }}
+										>
+											Try Again
+										</button>
+									</div>
+								</div>
+							) : clusteringInsights ? (
+								<>
+									{/* Summary */}
+									<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+										<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Total Analyzed</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "var(--foreground)" }}>{clusteringInsights.totalParticipants ?? 0}</p>
+										</div>
+										<div className="rounded-lg border p-4" style={{ borderColor: "rgba(16, 185, 129, 0.25)" }}>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>High Performers</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "#10b981" }}>{clusteringInsights.summary?.high_performers ?? 0}</p>
+										</div>
+										<div className="rounded-lg border p-4" style={{ borderColor: "rgba(234, 179, 8, 0.25)" }}>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Moderate Performers</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "#eab308" }}>{clusteringInsights.summary?.moderate_performers ?? 0}</p>
+										</div>
+										<div className="rounded-lg border p-4" style={{ borderColor: "rgba(239, 68, 68, 0.25)" }}>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Low Performers</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "#ef4444" }}>{clusteringInsights.summary?.low_performers ?? 0}</p>
+										</div>
+									</div>
+
+									{/* Individual result */}
+									{(() => {
+										const myCluster = clusteringInsights.clusterAssignment || clusteringInsights.clusters?.find((cluster) => cluster.memberIds?.includes(participantId));
+										if (!myCluster) {
+											return (
+												<div className="rounded-lg border p-6" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}>
+													<p className="text-sm" style={{ color: "var(--text-muted)" }}>
+														No performance cluster assigned yet. Attend and check in to more events to build your profile.
+													</p>
+												</div>
+											);
+										}
+
+										const scoreColor = myCluster.performanceScore >= 70 ? "#10b981" : myCluster.performanceScore >= 40 ? "#eab308" : "#ef4444";
+
+										return (
+											<div className="rounded-lg border p-6" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}>
+												<div className="flex items-center justify-between mb-4">
+													<div>
+														<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Your Cluster</p>
+														<h3 className="text-base font-bold" style={{ color: "var(--foreground)" }}>{myCluster.label}</h3>
+													</div>
+													<span
+														className="rounded-full px-3 py-1 text-xs font-bold"
+														style={{ backgroundColor: scoreColor + '20', color: scoreColor }}
+													>
+														{myCluster.performanceScore}/100
+													</span>
+												</div>
+												<div className="mb-4 h-2 rounded-full" style={{ backgroundColor: "rgba(107, 114, 128, 0.15)" }}>
+													<div
+														className="h-2 rounded-full"
+														style={{ width: `${Math.min(myCluster.performanceScore, 100)}%`, backgroundColor: scoreColor }}
+													/>
+												</div>
+												<div className="grid gap-3 sm:grid-cols-2">
+													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Attendance</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{((myCluster.centroid?.attendance_rate ?? 0) * 100).toFixed(0)}%</p>
+													</div>
+													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Similarity</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{((myCluster.centroid?.avg_similarity ?? 0) * 100).toFixed(0)}%</p>
+													</div>
+													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Punctuality</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{((myCluster.centroid?.punctuality_score ?? 0) * 100).toFixed(0)}%</p>
+													</div>
+													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Engagement</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{((myCluster.centroid?.engagement_score ?? 0) * 100).toFixed(0)}%</p>
+													</div>
+												</div>
+											</div>
+										);
+									})()}
+								</>
+							) : (
+								<button
+									onClick={fetchClusteringInsights}
+									className="w-full rounded-lg border p-6 text-sm font-semibold transition hover:opacity-90"
+									style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)", color: "var(--foreground)" }}
+								>
+									Generate Performance Clusters
+								</button>
 							)}
 						</section>
 
