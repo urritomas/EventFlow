@@ -276,6 +276,21 @@ const [cameraReady, setCameraReady] = useState(false);
 
 	// Auto-start camera when unified-scanner tab opens
 	useEffect(() => {
+		if (!isAuthorized || !eventId) return;
+		const scannerEnabled = Boolean(eventData?.with_FaceId || eventData?.with_RFID);
+		const geofenceEnabled = Boolean(eventData?.with_Geo);
+		const allowed = new Set([
+			"overview",
+			"registered",
+			"attendance",
+			"analytics",
+			...(scannerEnabled ? ["unified-scanner"] : []),
+			...(geofenceEnabled ? ["geofence"] : []),
+		]);
+		if (!allowed.has(activeTab)) setActiveTab("overview");
+	}, [isAuthorized, eventId, eventData?.with_FaceId, eventData?.with_RFID, eventData?.with_Geo, activeTab]);
+
+	useEffect(() => {
 		if (activeTab !== "unified-scanner" || !eventData?.with_FaceId) return;
 
 		const startCameraForScanning = async () => {
@@ -722,51 +737,62 @@ const [cameraReady, setCameraReady] = useState(false);
 
 						{/* Tabs */}
 					<div className="flex gap-2 border-b" style={{ borderColor: "var(--border-subtle)" }}>
-						{[
-              { id: "overview", label: "Overview", icon: Calendar },
-              { id: "unified-scanner", label: "Quick Scan", icon: Zap },
-              { id: "registered", label: "Registered", icon: Users },
-              { id: "attendance", label: "Attendees", icon: CheckCircle },
-              { id: "analytics", label: "Analytics", icon: TrendingUp },
-              ...(eventData?.with_Geo ? [{ id: "geofence", label: "Geofence", icon: Radar }] : []),
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-3 font-medium text-sm transition flex items-center gap-2 ${
-                  activeTab === tab.id ? "border-b-2" : ""
-                }`}
-                style={{
-                  color: activeTab === tab.id ? "#3b82f6" : "var(--text-muted)",
-                  borderBottomColor: activeTab === tab.id ? "#3b82f6" : "transparent",
-                }}
-              >
-                <tab.icon size={16} />
-                {tab.label}
-                {tab.id === "unified-scanner" && (
-                  <span
-                    className="rounded-full px-2 py-0.5 text-xs font-bold"
-                    style={{
-                      backgroundColor: "rgba(59, 130, 246, 0.15)",
-                      color: "#3b82f6",
-                    }}
-                  >
-                    FAST
-                  </span>
-                )}
-                {tab.id === "geofence" && (
-                  <span
-                    className="rounded-full px-2 py-0.5 text-xs font-bold"
-                    style={{
-                      backgroundColor: "rgba(16, 185, 129, 0.15)",
-                      color: "#10b981",
-                    }}
-                  >
-                    ACTIVE
-                  </span>
-                )}
-              </button>
-            ))}
+						{(() => {
+							const baseTabs = [
+								{ id: "overview", label: "Overview", icon: Calendar },
+								{ id: "registered", label: "Registered", icon: Users },
+								{ id: "attendance", label: "Attendees", icon: CheckCircle },
+								{ id: "analytics", label: "Analytics", icon: TrendingUp },
+							];
+
+							const scannerEnabled = Boolean(eventData?.with_FaceId || eventData?.with_RFID);
+							const geofenceEnabled = Boolean(eventData?.with_Geo);
+
+							const tabs = [
+								...baseTabs,
+								...(scannerEnabled ? [{ id: "unified-scanner", label: "Quick Scan", icon: Zap }] : []),
+								...(geofenceEnabled ? [{ id: "geofence", label: "Geofence", icon: Radar }] : []),
+							];
+
+							return tabs.map((tab) => (
+								<button
+									key={tab.id}
+									onClick={() => setActiveTab(tab.id)}
+									className={`px-4 py-3 font-medium text-sm transition flex items-center gap-2 ${
+										activeTab === tab.id ? "border-b-2" : ""
+									}`}
+									style={{
+										color: activeTab === tab.id ? "#3b82f6" : "var(--text-muted)",
+										borderBottomColor: activeTab === tab.id ? "#3b82f6" : "transparent",
+									}}
+								>
+									<tab.icon size={16} />
+									{tab.label}
+									{tab.id === "unified-scanner" && (
+										<span
+											className="rounded-full px-2 py-0.5 text-xs font-bold"
+											style={{
+												backgroundColor: "rgba(59, 130, 246, 0.15)",
+												color: "#3b82f6",
+											}}
+										>
+											FAST
+										</span>
+									)}
+									{tab.id === "geofence" && (
+										<span
+											className="rounded-full px-2 py-0.5 text-xs font-bold"
+											style={{
+												backgroundColor: "rgba(16, 185, 129, 0.15)",
+												color: "#10b981",
+											}}
+										>
+											ACTIVE
+										</span>
+									)}
+								</button>
+							));
+						})()}
 					</div>
 
 					{activeTab === "overview" && (
