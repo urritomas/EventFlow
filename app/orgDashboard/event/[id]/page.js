@@ -289,20 +289,24 @@ const [cameraReady, setCameraReady] = useState(false);
 
 			const latitude = position.coords.latitude;
 			const longitude = position.coords.longitude;
+			const requestMode = mode === "checkout" ? "checkout" : "checkin";
 
 			const res = await fetch("/api/verify-geofence", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ eventId: eventId, latitude, longitude }),
+				body: JSON.stringify({ eventId: eventId, latitude, longitude, mode: requestMode }),
 			});
 
 			const data = await res.json();
 			if (!res.ok || !data.allowed) {
 				const dist = data.distanceMeters != null ? `${data.distanceMeters}m` : "unknown distance";
 				const radius = data.radiusMeters != null ? `${data.radiusMeters}m` : "configured radius";
+				const reason = data.timeAllowed === false
+					? `Time window: ${data.message || "outside allowed checkout window"}. `
+					: "";
 				setScanResult({
 					success: false,
-					message: `Geofence check failed: ${participantName || "Participant"} is outside the allowed area (${dist} from venue, must be within ${radius}). ${data.message || ""}`.trim(),
+					message: `Geofence check failed: ${participantName || "Participant"} is outside the allowed area (${dist} from venue, must be within ${radius}). ${reason}${data.message || ""}`.trim(),
 				});
 				return false;
 			}
@@ -603,6 +607,9 @@ const [cameraReady, setCameraReady] = useState(false);
 					return;
 				}
 
+				const geofenceOk = await verifyGeofence(participant.name);
+				if (!geofenceOk) return;
+
 				const { error: updateError } = await supabase
 					.from("attendance")
 					.update({
@@ -626,20 +633,20 @@ const [cameraReady, setCameraReady] = useState(false);
 					.eq("participant_id", participant.participant_id)
 					.maybeSingle();
 
-			if (existingAttendanceId) {
-				setScanResult({ success: true, message: `${participant.name} is already checked in.` });
-			} else {
-				const geofenceOk = await verifyGeofence(participant.name);
-				if (!geofenceOk) return;
+				if (existingAttendanceId) {
+					setScanResult({ success: true, message: `${participant.name} is already checked in.` });
+				} else {
+					const geofenceOk = await verifyGeofence(participant.name);
+					if (!geofenceOk) return;
 
-				const { error: insertError } = await supabase.from("attendance").insert({
-					event_id: eventId,
-					participant_id: participant.participant_id,
-					check_in_time: new Date().toISOString(),
-					verified: false,
-					verification_method: "rfid",
-					source_rfid: trimmed,
-				});
+					const { error: insertError } = await supabase.from("attendance").insert({
+						event_id: eventId,
+						participant_id: participant.participant_id,
+						check_in_time: new Date().toISOString(),
+						verified: false,
+						verification_method: "rfid",
+						source_rfid: trimmed,
+					});
 
 					if (insertError) {
 						setScanResult({ success: false, message: "Check-in failed: " + insertError.message });

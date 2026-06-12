@@ -142,6 +142,8 @@ const [location, setLocation] = useState({ lat: null, lng: null });
     geofenceLateMinutes: "",
     geofenceLateCheckinThreshold: "15",
     geofenceReverifyMinutes: "15",
+    geofenceEarlyCheckoutMinutes: "",
+    geofenceLateCheckoutMinutes: "",
   });
 
 	useEffect(() => {
@@ -216,6 +218,8 @@ const [location, setLocation] = useState({ lat: null, lng: null });
 				geofence_reverify_minutes: parseInt(formData.geofenceReverifyMinutes || "15", 10) || 15,
 				geofence_checkin_window:
 					(parseInt(formData.geofenceEarlyMinutes || "0", 10) || 0) + (parseInt(formData.geofenceLateMinutes || "0", 10) || 0),
+				geofence_checkout_window:
+					(parseInt(formData.geofenceEarlyCheckoutMinutes || "0", 10) || 0) + (parseInt(formData.geofenceLateCheckoutMinutes || "0", 10) || 0),
 			};
 
 			console.log("Creating event with payload:", eventPayload);
@@ -252,6 +256,8 @@ const [location, setLocation] = useState({ lat: null, lng: null });
 				geofenceEarlyMinutes: "",
 				geofenceLateMinutes: "",
 				geofenceReverifyMinutes: "15",
+				geofenceEarlyCheckoutMinutes: "",
+				geofenceLateCheckoutMinutes: "",
 			});
 			setLocation({ lat: null, lng: null });
 
@@ -729,30 +735,104 @@ const [location, setLocation] = useState({ lat: null, lng: null });
                            </p>
                          </div>
 
-                         <div>
-                           <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-                             Late Check-in Window (minutes after start)
-                           </label>
-                           <input
-                             type="number"
-                             name="geofenceLateMinutes"
-                             value={formData.geofenceLateMinutes}
-                             onChange={handleInputChange}
-                             min="0"
-                             max="180"
-                             step="5"
-                             className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
-                             style={{
-                               backgroundColor: "var(--page-bg)",
-                               borderColor: "var(--border-subtle)",
-                               color: "var(--foreground)",
-                             }}
-                           />
-                           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                             Allow check-in this many minutes after the event starts
-                           </p>
-                         </div>
-                       </div>
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                              Late Check-in Window (minutes after start)
+                            </label>
+                            <input
+                              type="number"
+                              name="geofenceLateMinutes"
+                              value={formData.geofenceLateMinutes}
+                              onChange={handleInputChange}
+                              min="0"
+                              max="180"
+                              step="5"
+                              className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                              style={{
+                                backgroundColor: "var(--page-bg)",
+                                borderColor: "var(--border-subtle)",
+                                color: "var(--foreground)",
+                              }}
+                            />
+                            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                              Allow check-in this many minutes after the event starts
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                              Late Check-in Threshold (minutes)
+                            </label>
+                            <input
+                              type="number"
+                              name="geofenceLateCheckinThreshold"
+                              value={formData.geofenceLateCheckinThreshold}
+                              onChange={handleInputChange}
+                              min="0"
+                              max="180"
+                              step="5"
+                              className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                              style={{
+                                backgroundColor: "var(--page-bg)",
+                                borderColor: "var(--border-subtle)",
+                                color: "var(--foreground)",
+                              }}
+                            />
+                            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                              Minutes after start before late penalty applies
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                              Early Check-out Window (minutes before end)
+                            </label>
+                            <input
+                              type="number"
+                              name="geofenceEarlyCheckoutMinutes"
+                              value={formData.geofenceEarlyCheckoutMinutes}
+                              onChange={handleInputChange}
+                              min="0"
+                              max="180"
+                              step="5"
+                              className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                              style={{
+                                backgroundColor: "var(--page-bg)",
+                                borderColor: "var(--border-subtle)",
+                                color: "var(--foreground)",
+                              }}
+                            />
+                            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                              Allow check-out this many minutes before the event ends
+                            </p>
+                          </div>
+
+                          <div>
+                            <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                              Late Check-out Window (minutes after end)
+                            </label>
+                            <input
+                              type="number"
+                              name="geofenceLateCheckoutMinutes"
+                              value={formData.geofenceLateCheckoutMinutes}
+                              onChange={handleInputChange}
+                              min="0"
+                              max="180"
+                              step="5"
+                              className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                              style={{
+                                backgroundColor: "var(--page-bg)",
+                                borderColor: "var(--border-subtle)",
+                                color: "var(--foreground)",
+                              }}
+                            />
+                            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                              Allow check-out this many minutes after the event ends
+                            </p>
+                          </div>
+                        </div>
 
                        <div>
                          <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
@@ -803,5 +883,6 @@ const [location, setLocation] = useState({ lat: null, lng: null });
           </main>
         </div>
       </div>
-	);
+    );
+  }
 }

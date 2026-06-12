@@ -28,7 +28,7 @@ function haversineDistanceMeters(lat1, lon1, lat2, lon2) {
 export async function POST(request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { eventId, latitude, longitude } = body || {};
+    const { eventId, latitude, longitude, mode = "checkin" } = body || {};
 
     if (!eventId || latitude == null || longitude == null) {
       return NextResponse.json(
@@ -49,7 +49,7 @@ export async function POST(request) {
 
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("event_id, latitude, longitude, geofence_radius, with_Geo, venue_name")
+      .select("event_id, latitude, longitude, geofence_radius, with_Geo, venue_name, event_date, start_time, end_time, geofence_early_checkin_allowed, geofence_late_checkin_allowed, geofence_early_checkout_allowed, geofence_late_checkout_allowed")
       .eq("event_id", eventIdNumber)
       .maybeSingle();
 
@@ -82,18 +82,56 @@ export async function POST(request) {
     }
 
     const distance = haversineDistanceMeters(userLat, userLng, venueLat, venueLng);
-    const allowed = distance <= radius;
+    const insideGeofence = distance <= radius;
+
+    const isCheckout = mode === "checkout";
+    const now = new Date();
+    const eventStart = new Date(`${event.event_date}T${event.start_time || "00:00"}`);
+    const eventEnd = event.end_time ? new Date(`${event.event_date}T${event.end_time}`) : null;
+
+    let timeAllowed = true;
+    let timeMessage = "";
+
+    if (isCheckout) {
+      const earlyWindow = Number(event.geofence_early_checkout_allowed || 0);
+      const lateWindow = Number(event.geofence_late_checkout_allowed || 0);
+
+      if (!eventEnd) {
+        timeAllowed = true;
+        timeMessage = "No event end time configured; checkout time window is open.";
+      } else {
+        const checkoutStart = new Date(eventEnd.getTime() - earlyWindow * 60 * 1000);
+        const checkoutEnd = new Date(eventEnd.getTime() + lateWindow * 60 * 1000);
+        timeAllowed = now >= checkoutStart && now <= checkoutEnd;
+        timeMessage = `Checkout window: ${checkoutStart.toLocaleTimeString()} - ${checkoutEnd.toLocaleTimeString()}. Now: ${now.toLocaleTimeString()}.`;
+      }
+    } else {
+      const earlyWindow = Number(event.geofence_early_checkin_allowed || 0);
+      const lateWindow = Number(event.geofence_late_checkin_allowed || 0);
+
+      const checkinStart = new Date(eventStart.getTime() - earlyWindow * 60 * 1000);
+      const checkinEnd = eventEnd
+        ? new Date(eventEnd.getTime() + lateWindow * 60 * 1000)
+        : new Date(eventStart.getTime() + lateWindow * 60 * 1000);
+      timeAllowed = now >= checkinStart && now <= checkinEnd;
+      timeMessage = `Check-in window: ${checkinStart.toLocaleTimeString()} - ${checkinEnd.toLocaleTimeString()}. Now: ${now.toLocaleTimeString()}.`;
+    }
+
+    const allowed = insideGeofence && timeAllowed;
 
     return NextResponse.json({
       eventId: eventIdNumber,
       withGeo: true,
+      mode,
       allowed,
+      insideGeofence,
+      timeAllowed,
       distanceMeters: Math.round(distance),
       radiusMeters: radius,
       venueName: event.venue_name || null,
       message: allowed
-        ? `You are inside the geofence (${Math.round(distance)}m from venue, within ${radius}m).`
-        : `You are outside the geofence (${Math.round(distance)}m from venue, must be within ${radius}m).`,
+        ? `${isCheckout ? "Checkout" : "Check-in"} allowed (${Math.round(distance)}m from venue, within ${radius}m). ${timeMessage}`
+        : `${isCheckout ? "Checkout" : "Check-in"} blocked. ${!insideGeofence ? `You are outside the geofence (${Math.round(distance)}m from venue, must be within ${radius}m). ` : ""}${!timeAllowed ? timeMessage : ""}`.trim(),
     });
   } catch (error) {
     console.error("[verify-geofence] Unexpected error:", error);
