@@ -26,14 +26,16 @@ import {
 	SlidersHorizontal,
 	User,
 	Trash2,
+	ShieldCheck,
 } from "lucide-react";
 
-function Sidebar({ isOpen, onClose, onLogout }) {
-	const router = useRouter();
-	const menuItems = [
-		{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
-		{ label: "Create Event", icon: Plus, href: "/orgDashboard/create-event" },
-	];
+	function Sidebar({ isOpen, onClose, onLogout }) {
+		const router = useRouter();
+		const menuItems = [
+			{ label: "Dashboard", icon: BarChart3, href: "/orgDashboard" },
+			{ label: "Create Event", icon: Plus, href: "/orgDashboard/create-event" },
+			{ label: "Registration Confirmation", icon: ShieldCheck, href: "/orgDashboard/performance-registrations" },
+		];
 
 	return (
 		<>
@@ -215,6 +217,12 @@ export default function OrgDashboard() {
 	const [eventToDelete, setEventToDelete] = useState(null);
 	const [isDeleting, setIsDeleting] = useState(false);
 	const [attendanceStats, setAttendanceStats] = useState({ onPremise: 0, online: 0, geofenceActive: false });
+	const [registrations, setRegistrations] = useState([]);
+	const [selectedRegistration, setSelectedRegistration] = useState(null);
+	const [reviewModal, setReviewModal] = useState(false);
+	const [registrationAction, setRegistrationAction] = useState(null);
+	const [isProcessing, setIsProcessing] = useState(false);
+	const [registrationMessage, setRegistrationMessage] = useState("");
 
 	useEffect(() => {
 		const fetchData = async () => {

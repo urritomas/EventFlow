@@ -283,6 +283,7 @@ export default function PersonalDashboard() {
 	const [participantId, setParticipantId] = useState(null);
 	const [selectedEvent, setSelectedEvent] = useState(null);
 	const [isRegistered, setIsRegistered] = useState(false);
+	const [registrationReviewStatus, setRegistrationReviewStatus] = useState(null);
 	const [isRegistering, setIsRegistering] = useState(false);
 	const [showRFIDStep, setShowRFIDStep] = useState(false);
 	const [rfidCode, setRfidCode] = useState("");
@@ -309,6 +310,7 @@ export default function PersonalDashboard() {
 		setShowRFIDStep(false);
 		setRfidCode("");
 		setRegistrationMessage("");
+		setRegistrationReviewStatus(null);
 		
 		// Check if user is registered for this event
 		if (participantId) {
@@ -319,7 +321,13 @@ export default function PersonalDashboard() {
 				.eq("event_id", event.event_id)
 				.eq("participant_id", participantId);
 			
-			setIsRegistered(eventParticipants && eventParticipants.length > 0);
+			if (eventParticipants && eventParticipants.length > 0) {
+				setIsRegistered(true);
+				setRegistrationReviewStatus(eventParticipants[0].review_status || "pending");
+			} else {
+				setIsRegistered(false);
+				setRegistrationReviewStatus(null);
+			}
 		}
 	};
 
@@ -387,6 +395,7 @@ export default function PersonalDashboard() {
 				setIsRegistered(false);
 				setShowRFIDStep(false);
 				setRegistrationMessage("✓ You have been unregistered from this event");
+				setRegistrationReviewStatus(null);
 				
 				// Update the registered events list immediately
 				const newRegisteredIds = new Set(userRegisteredEventIds);
@@ -1275,18 +1284,33 @@ export default function PersonalDashboard() {
 													</div>
 												)}
 
-												{/* Registration Status */}
-												<div
-													className="rounded-lg p-3 border"
-													style={{
-														backgroundColor: isRegistered ? "rgba(16, 185, 129, 0.1)" : "rgba(59, 130, 246, 0.1)",
-														borderColor: isRegistered ? "#10b981" : "#3b82f6",
-													}}
-												>
-													<p className="text-sm font-semibold" style={{ color: isRegistered ? "#10b981" : "#3b82f6" }}>
-														{isRegistered ? "✓ You are registered for this event" : "Not registered for this event"}
+											{/* Registration Status */}
+											<div
+												className="rounded-lg p-3 border"
+												style={{
+													backgroundColor: isRegistered ? "rgba(16, 185, 129, 0.1)" : "rgba(59, 130, 246, 0.1)",
+													borderColor: isRegistered ? "#10b981" : "#3b82f6",
+												}}
+											>
+												<p className="text-sm font-semibold" style={{ color: isRegistered ? "#10b981" : "#3b82f6" }}>
+													{isRegistered ? "✓ Registered for this event" : "Not registered for this event"}
+												</p>
+												{isRegistered && registrationReviewStatus === "pending" && (
+													<p className="text-xs mt-1" style={{ color: "#eab308" }}>
+														Status: Pending organization review
 													</p>
-												</div>
+												)}
+												{isRegistered && registrationReviewStatus === "accepted" && (
+													<p className="text-xs mt-1" style={{ color: "#10b981" }}>
+														Status: Accepted by organizer
+													</p>
+												)}
+												{isRegistered && registrationReviewStatus === "declined" && (
+													<p className="text-xs mt-1" style={{ color: "#ef4444" }}>
+														Status: Declined by organizer
+													</p>
+												)}
+											</div>
 
 												{/* Action Buttons */}
 												<div className="flex gap-3 pt-4">

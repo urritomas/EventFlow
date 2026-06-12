@@ -10,30 +10,31 @@ const LocationPickerMap = dynamic(() => import("@/components/LocationPickerMap")
   ssr: false,
 });
 import {
-  Menu,
-  X,
-  LogOut,
-  LogIn,
-  ArrowLeft,
-  Calendar,
-  Clock,
-  MapPin,
-  Users,
-  BarChart3,
-  TrendingUp,
-  Check,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Wifi,
-  WifiOff,
-  Camera,
-  CreditCard,
-  Zap,
-  ShieldCheck,
-  Download,
-  Trash2,
-  Radar,
+	Menu,
+	X,
+	LogOut,
+	LogIn,
+	ArrowLeft,
+	Calendar,
+	Clock,
+	MapPin,
+	Users,
+	BarChart3,
+	TrendingUp,
+	Check,
+	CheckCircle,
+	XCircle,
+	AlertCircle,
+	Wifi,
+	WifiOff,
+	Camera,
+	CreditCard,
+	Zap,
+	ShieldCheck,
+	Download,
+	Trash2,
+	Radar,
+	UserMinus,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
@@ -150,9 +151,12 @@ const [cameraReady, setCameraReady] = useState(false);
   const [registeredParticipants, setRegisteredParticipants] = useState([]);
   const [geofenceCenter, setGeofenceCenter] = useState({ lat: null, lng: null });
   const [geofenceAttendees, setGeofenceAttendees] = useState([]);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const rfidInput = useRef(null);
+	const [showDeleteModal, setShowDeleteModal] = useState(false);
+	const [isDeleting, setIsDeleting] = useState(false);
+	const [showDeleteRegModal, setShowDeleteRegModal] = useState(false);
+	const [deletingRegId, setDeletingRegId] = useState(null);
+	const [isDeletingReg, setIsDeletingReg] = useState(false);
+	const rfidInput = useRef(null);
 
 	useEffect(() => {
 		const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -221,7 +225,6 @@ const [cameraReady, setCameraReady] = useState(false);
 
 		setIsDeleting(true);
 		try {
-			// Call API route with service role to bypass RLS
 			const response = await fetch("/api/admin/events", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -241,6 +244,33 @@ const [cameraReady, setCameraReady] = useState(false);
 		} finally {
 			setIsDeleting(false);
 			setShowDeleteModal(false);
+		}
+	};
+
+	const handleDeleteRegistration = async (registrationId, participantName) => {
+		if (!eventId) return;
+
+		setIsDeletingReg(true);
+		try {
+			const { error } = await createClient()
+				.from("event_participants")
+				.delete()
+				.eq("id", registrationId)
+				.eq("event_id", eventId);
+
+			if (error) {
+				alert("Failed to remove registration: " + error.message);
+				return;
+			}
+
+			setRegisteredParticipants((prev) => prev.filter((p) => p.id !== registrationId));
+			setShowDeleteRegModal(false);
+			setDeletingRegId(null);
+		} catch (error) {
+			console.error("Delete registration error:", error);
+			alert("Exception while removing registration: " + error.message);
+		} finally {
+			setIsDeletingReg(false);
 		}
 	};
 
@@ -1207,6 +1237,9 @@ const [cameraReady, setCameraReady] = useState(false);
 												<th className="px-6 py-3 text-left font-semibold" style={{ color: "var(--text-muted)" }}>
 													Status
 												</th>
+												<th className="px-6 py-3 text-right font-semibold" style={{ color: "var(--text-muted)" }}>
+													Action
+												</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -1236,6 +1269,23 @@ const [cameraReady, setCameraReady] = useState(false);
 															Registered
 														</span>
 													</td>
+													<td className="px-6 py-4 text-right">
+														<button
+															onClick={() => {
+																setDeletingRegId(participant.id);
+																setShowDeleteRegModal(true);
+															}}
+															className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition hover:opacity-90"
+															style={{
+																backgroundColor: "rgba(239, 68, 68, 0.1)",
+																color: "#ef4444",
+																border: "1px solid rgba(239, 68, 68, 0.25)",
+															}}
+														>
+															<UserMinus size={14} />
+															Remove
+														</button>
+													</td>
 												</tr>
 											))}
 											{registeredParticipants.length === 0 && (
@@ -1243,7 +1293,7 @@ const [cameraReady, setCameraReady] = useState(false);
 													<td
 														className="px-6 py-6 text-center text-sm"
 														style={{ color: "var(--text-muted)" }}
-														colSpan={3}
+														colSpan={4}
 													>
 														No registered participants found.
 													</td>
@@ -1584,6 +1634,64 @@ const [cameraReady, setCameraReady] = useState(false);
 											}}
 										>
 											{isDeleting ? "Deleting..." : "Delete Event"}
+										</button>
+									</div>
+								</div>
+							</div>
+						)}
+
+						{/* Delete Registration Confirmation Modal */}
+						{showDeleteRegModal && (
+							<div
+								className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+								onClick={() => setShowDeleteRegModal(false)}
+							>
+								<div
+									className="rounded-lg border max-w-md w-full p-6"
+									style={{
+										backgroundColor: "var(--surface)",
+										borderColor: "var(--border-subtle)",
+									}}
+									onClick={(e) => e.stopPropagation()}
+								>
+									<div className="flex items-center gap-3 mb-4">
+										<div
+											className="rounded-full p-2"
+											style={{ backgroundColor: "rgba(239, 68, 68, 0.1)" }}
+										>
+											<UserMinus size={24} style={{ color: "#ef4444" }} />
+										</div>
+										<h2 className="text-xl font-bold" style={{ color: "var(--foreground)" }}>
+											Remove Registration
+										</h2>
+									</div>
+									<p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
+										Are you sure you want to remove this registration? This will delete the registration record. Attendance history for this event will remain.
+									</p>
+									<div className="flex gap-3 justify-end">
+										<button
+											onClick={() => {
+												setShowDeleteRegModal(false);
+												setDeletingRegId(null);
+											}}
+											disabled={isDeletingReg}
+											className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-80"
+											style={{
+												backgroundColor: "var(--surface-soft)",
+												color: "var(--foreground)",
+											}}
+										>
+											Cancel
+										</button>
+										<button
+											onClick={() => handleDeleteRegistration(deletingRegId)}
+											disabled={isDeletingReg}
+											className="rounded-lg px-4 py-2 font-semibold text-sm text-white transition hover:opacity-90"
+											style={{
+												backgroundColor: "#ef4444",
+											}}
+										>
+											{isDeletingReg ? "Removing..." : "Remove Registration"}
 										</button>
 									</div>
 								</div>
