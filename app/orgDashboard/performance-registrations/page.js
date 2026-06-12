@@ -5,18 +5,24 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../../components/SiteHeader";
 import {
-	ArrowLeft,
-	Calendar,
 	CheckCircle2,
-	ChevronRight,
+	XCircle,
 	Clock,
+	Users,
+	Calendar,
+	AlertTriangle,
+	AlertCircle,
+	TrendingUp,
+	TrendingDown,
+	Search,
+	ArrowLeft,
+	ShieldCheck,
+	ClipboardList,
 	Filter,
+	Info,
 	LogOut,
 	Menu,
-	Search,
-	ShieldCheck,
 	X,
-	XCircle,
 } from "lucide-react";
 
 function Sidebar({ isOpen, onClose, onLogout }) {
@@ -536,7 +542,20 @@ export default function PerformanceRegistrationsPage() {
 															<MetricBadge label="Attendance Rate" value={`${reg.metrics.attendanceRate}%`} color="#10b981" />
 															<MetricBadge label="Events Attended" value={reg.metrics.totalEventsAttended} unit={`/${reg.metrics.totalEventsRegistered}`} color="#3b82f6" />
 															<MetricBadge label="Absences" value={reg.metrics.absences} color={reg.metrics.absences > 3 ? "#ef4444" : "#6b7280"} />
-															<MetricBadge label="Late Check-ins" value={reg.metrics.lateCheckIns} color={reg.metrics.lateCheckIns > 2 ? "#f97316" : "#6b7280"} />
+															<MetricBadge
+																label="Late Check-ins"
+																value={`${reg.lateCount || 0}/${reg.lateThreshold || 15}`}
+																color={(reg.lateCount || 0) >= (reg.lateThreshold || 15) ? "#ef4444" : "#f97316"}
+															/>
+														</div>
+													)}
+
+													{reg.isFrequentlyLate && (
+														<div className="mt-3 rounded-lg p-3 text-xs flex items-center gap-2" style={{ backgroundColor: "rgba(239, 68, 68, 0.08)", color: "#ef4444" }}>
+															<AlertTriangle size={14} />
+															<span>
+																Frequent late check-ins detected ({reg.lateCount || 0} of {reg.lateThreshold || 15} threshold). This may affect performance cluster level.
+															</span>
 														</div>
 													)}
 

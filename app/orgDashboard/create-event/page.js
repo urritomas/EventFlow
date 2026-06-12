@@ -138,6 +138,10 @@ const [location, setLocation] = useState({ lat: null, lng: null });
     rfidEnabled: false,
     faceRecognitionEnabled: false,
     geofencingEnabled: false,
+    geofenceEarlyMinutes: "",
+    geofenceLateMinutes: "",
+    geofenceLateCheckinThreshold: "15",
+    geofenceReverifyMinutes: "15",
   });
 
 	useEffect(() => {
@@ -207,6 +211,11 @@ const [location, setLocation] = useState({ lat: null, lng: null });
 				with_RFID: !!formData.rfidEnabled,
 				with_FaceId: !!formData.faceRecognitionEnabled,
 				with_Geo: !!formData.geofencingEnabled,
+				geofence_early_checkin_allowed: parseInt(formData.geofenceEarlyMinutes || "0", 10) || 0,
+				geofence_late_checkin_allowed: parseInt(formData.geofenceLateMinutes || "0", 10) || 0,
+				geofence_reverify_minutes: parseInt(formData.geofenceReverifyMinutes || "15", 10) || 15,
+				geofence_checkin_window:
+					(parseInt(formData.geofenceEarlyMinutes || "0", 10) || 0) + (parseInt(formData.geofenceLateMinutes || "0", 10) || 0),
 			};
 
 			console.log("Creating event with payload:", eventPayload);
@@ -240,6 +249,9 @@ const [location, setLocation] = useState({ lat: null, lng: null });
 				rfidEnabled: false,
 				faceRecognitionEnabled: false,
 				geofencingEnabled: false,
+				geofenceEarlyMinutes: "",
+				geofenceLateMinutes: "",
+				geofenceReverifyMinutes: "15",
 			});
 			setLocation({ lat: null, lng: null });
 
@@ -628,60 +640,136 @@ const [location, setLocation] = useState({ lat: null, lng: null });
                   </div>
                 </section>
 
-                {/* Geofence Settings - shown only when geofencing is enabled */}
-                {formData.geofencingEnabled && (
-                  <section
-                    className="rounded-lg border p-6 animate-[fadeIn_0.8s_ease-out]"
-                    style={{
-                      backgroundColor: "var(--surface)",
-                      borderColor: "var(--border-subtle)",
-                    }}
-                  >
-                    <h2 className="mb-4 text-lg font-semibold flex items-center gap-2" style={{ color: "var(--foreground)" }}>
-                      <MapPin size={18} />
-                      Geofence Configuration
-                    </h2>
+                 {/* Geofence Settings - shown only when geofencing is enabled */}
+                 {formData.geofencingEnabled && (
+                   <section
+                     className="rounded-lg border p-6 animate-[fadeIn_0.8s_ease-out]"
+                     style={{
+                       backgroundColor: "var(--surface)",
+                       borderColor: "var(--border-subtle)",
+                     }}
+                   >
+                     <h2 className="mb-4 text-lg font-semibold flex items-center gap-2" style={{ color: "var(--foreground)" }}>
+                       <MapPin size={18} />
+                       Geofence Configuration
+                     </h2>
 
-                    <div className="space-y-4">
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-                          Geofence Radius (meters)
-                        </label>
-                        <input
-                          type="number"
-                          value={geofenceRadius}
-                          onChange={(e) => setGeofenceRadius(parseInt(e.target.value) || 100)}
-                          min="10"
-                          max="5000"
-                          step="10"
-                          className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
-                          style={{
-                            backgroundColor: "var(--page-bg)",
-                            borderColor: "var(--border-subtle)",
-                            color: "var(--foreground)",
-                          }}
-                        />
-                        <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                          Participants must be within this distance from the venue to check in
-                        </p>
-                      </div>
+                     <div className="space-y-4">
+                       <div className="grid gap-4 md:grid-cols-2">
+                         <div>
+                           <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                             Geofence Radius (meters)
+                           </label>
+                           <input
+                             type="number"
+                             value={geofenceRadius}
+                             onChange={(e) => setGeofenceRadius(parseInt(e.target.value) || 100)}
+                             min="10"
+                             max="5000"
+                             step="10"
+                             className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                             style={{
+                               backgroundColor: "var(--page-bg)",
+                               borderColor: "var(--border-subtle)",
+                               color: "var(--foreground)",
+                             }}
+                           />
+                           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                             Participants must be within this distance from the venue to check in
+                           </p>
+                         </div>
 
-                      <div>
-                        <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-                          Geofence Area Preview
-                        </label>
-                        <LocationPickerMap
-                          radius={geofenceRadius}
-                          initialLocation={location.lat && location.lng ? { lat: location.lat, lng: location.lng } : null}
-                          readonly={true}
-                        />
-                        <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-                          Geofence center uses the venue location set above
-                        </p>
-                      </div>
-                    </div>
-                  </section>
-                )}
+                         <div>
+                           <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                             Re-verification Interval (minutes)
+                           </label>
+                           <input
+                             type="number"
+                             name="geofenceReverifyMinutes"
+                             value={formData.geofenceReverifyMinutes}
+                             onChange={handleInputChange}
+                             min="5"
+                             max="120"
+                             step="5"
+                             className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                             style={{
+                               backgroundColor: "var(--page-bg)",
+                               borderColor: "var(--border-subtle)",
+                               color: "var(--foreground)",
+                             }}
+                           />
+                           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                             Require location re-check every N minutes while checked in
+                           </p>
+                         </div>
+                       </div>
+
+                       <div className="grid gap-4 md:grid-cols-2">
+                         <div>
+                           <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                             Early Check-in Window (minutes before start)
+                           </label>
+                           <input
+                             type="number"
+                             name="geofenceEarlyMinutes"
+                             value={formData.geofenceEarlyMinutes}
+                             onChange={handleInputChange}
+                             min="0"
+                             max="180"
+                             step="5"
+                             className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                             style={{
+                               backgroundColor: "var(--page-bg)",
+                               borderColor: "var(--border-subtle)",
+                               color: "var(--foreground)",
+                             }}
+                           />
+                           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                             Allow check-in this many minutes before the event starts
+                           </p>
+                         </div>
+
+                         <div>
+                           <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                             Late Check-in Window (minutes after start)
+                           </label>
+                           <input
+                             type="number"
+                             name="geofenceLateMinutes"
+                             value={formData.geofenceLateMinutes}
+                             onChange={handleInputChange}
+                             min="0"
+                             max="180"
+                             step="5"
+                             className="w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 transition hover:border-blue-300"
+                             style={{
+                               backgroundColor: "var(--page-bg)",
+                               borderColor: "var(--border-subtle)",
+                               color: "var(--foreground)",
+                             }}
+                           />
+                           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                             Allow check-in this many minutes after the event starts
+                           </p>
+                         </div>
+                       </div>
+
+                       <div>
+                         <label className="mb-2 block text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                           Geofence Area Preview
+                         </label>
+                         <LocationPickerMap
+                           radius={geofenceRadius}
+                           initialLocation={location.lat && location.lng ? { lat: location.lat, lng: location.lng } : null}
+                           readonly={true}
+                         />
+                         <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                           Geofence center uses the venue location set above
+                         </p>
+                       </div>
+                     </div>
+                   </section>
+                 )}
 
                 {/* Submit Button */}
                 <div className="flex gap-3 animate-[fadeIn_0.9s_ease-out]">

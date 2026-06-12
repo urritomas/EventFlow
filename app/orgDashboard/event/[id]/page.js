@@ -274,6 +274,47 @@ const [cameraReady, setCameraReady] = useState(false);
 		}
 	};
 
+	const verifyGeofence = async (participantName) => {
+		if (!eventData?.with_Geo) return true;
+
+		if (!("geolocation" in navigator)) {
+			setScanResult({ success: false, message: "Geolocation is not supported by your browser. Cannot verify location." });
+			return false;
+		}
+
+		try {
+			const position = await new Promise((resolve, reject) => {
+				navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+			});
+
+			const latitude = position.coords.latitude;
+			const longitude = position.coords.longitude;
+
+			const res = await fetch("/api/verify-geofence", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ eventId: eventId, latitude, longitude }),
+			});
+
+			const data = await res.json();
+			if (!res.ok || !data.allowed) {
+				const dist = data.distanceMeters != null ? `${data.distanceMeters}m` : "unknown distance";
+				const radius = data.radiusMeters != null ? `${data.radiusMeters}m` : "configured radius";
+				setScanResult({
+					success: false,
+					message: `Geofence check failed: ${participantName || "Participant"} is outside the allowed area (${dist} from venue, must be within ${radius}). ${data.message || ""}`.trim(),
+				});
+				return false;
+			}
+
+			return true;
+		} catch (error) {
+			console.error("Geofence verification error:", error);
+			setScanResult({ success: false, message: "Geofence verification failed: " + error.message });
+			return false;
+		}
+	};
+
 	// Auto-start camera when unified-scanner tab opens
 	useEffect(() => {
 		if (!isAuthorized || !eventId) return;
@@ -361,6 +402,12 @@ const [cameraReady, setCameraReady] = useState(false);
 				if (alreadyCheckedInIds.has(participantId)) {
 					setScanStatus("already_done");
 				} else {
+					const geofenceOk = await verifyGeofence(data.name);
+					if (!geofenceOk) {
+						setScanStatus("idle");
+						return;
+					}
+
 					setScanStatus("verified");
 					setCheckedInFaceIds((prev) => new Set([...prev, participantId]));
 
@@ -579,17 +626,20 @@ const [cameraReady, setCameraReady] = useState(false);
 					.eq("participant_id", participant.participant_id)
 					.maybeSingle();
 
-				if (existingAttendanceId) {
-					setScanResult({ success: true, message: `${participant.name} is already checked in.` });
-				} else {
-					const { error: insertError } = await supabase.from("attendance").insert({
-						event_id: eventId,
-						participant_id: participant.participant_id,
-						check_in_time: new Date().toISOString(),
-						verified: false,
-						verification_method: "rfid",
-						source_rfid: trimmed,
-					});
+			if (existingAttendanceId) {
+				setScanResult({ success: true, message: `${participant.name} is already checked in.` });
+			} else {
+				const geofenceOk = await verifyGeofence(participant.name);
+				if (!geofenceOk) return;
+
+				const { error: insertError } = await supabase.from("attendance").insert({
+					event_id: eventId,
+					participant_id: participant.participant_id,
+					check_in_time: new Date().toISOString(),
+					verified: false,
+					verification_method: "rfid",
+					source_rfid: trimmed,
+				});
 
 					if (insertError) {
 						setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
@@ -1557,31 +1607,69 @@ const [cameraReady, setCameraReady] = useState(false);
 										/>
 									</div>
 
-									<div className="grid gap-4 md:grid-cols-3">
+									<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 										<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Geofence Radius</p>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Radius</p>
 											<p className="mt-2 text-2xl font-bold" style={{ color: "#3b82f6" }}>{eventData.geofence_radius || 100}m</p>
 										</div>
 										<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Participants Inside</p>
-											<p className="mt-2 text-2xl font-bold" style={{ color: "#10b981" }}>{geofenceAttendees.length}</p>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Early Check-in</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "#10b981" }}>{eventData.geofence_early_checkin_allowed || 0}m</p>
 										</div>
 										<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Total Registered</p>
-											<p className="mt-2 text-2xl font-bold" style={{ color: "var(--foreground)" }}>{registeredParticipants.length}</p>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Late Allowance</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "#f59e0b" }}>{eventData.geofence_late_checkin_allowed || 0}m</p>
+										</div>
+										<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+											<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Reverify Every</p>
+											<p className="mt-2 text-2xl font-bold" style={{ color: "#ef4444" }}>{eventData.geofence_reverify_minutes || 15}m</p>
 										</div>
 									</div>
 
+									<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)", backgroundColor: "var(--page-bg)" }}>
+										<p className="text-xs font-semibold mb-2" style={{ color: "var(--foreground)" }}>Effective Check-in Window</p>
+										<p className="text-sm" style={{ color: "var(--text-muted)" }}>
+											{(eventData.geofence_early_checkin_allowed || 0) > 0
+												? `${eventData.geofence_early_checkin_allowed} minutes before start`
+												: "No early check-in"}
+											{(eventData.geofence_early_checkin_allowed || 0) > 0 && (eventData.geofence_late_checkin_allowed || 0) > 0 ? " • " : ""}
+											{(eventData.geofence_late_checkin_allowed || 0) > 0
+												? `${eventData.geofence_late_checkin_allowed} minutes after start`
+												: "No late check-in"}
+										</p>
+									</div>
+
 									<button
-										onClick={() => {
-											if ("geolocation" in navigator) {
+										onClick={async () => {
+											if (!("geolocation" in navigator)) {
+												alert("Geolocation is not supported by your browser.");
+												return;
+											}
+											try {
+												const now = new Date();
+												const [hours, minutes] = String(eventData.start_time || "00:00").split(":").map(Number);
+												const start = new Date(eventData.event_date || now.toISOString().slice(0, 10));
+												start.setHours(hours || 0, minutes || 0, 0, 0);
+												const end = eventData.end_time ? (() => {
+													const [eh, em] = String(eventData.end_time).split(":").map(Number);
+													const d = new Date(start);
+													d.setHours(eh || 0, em || 0, 0, 0);
+													return d;
+												})() : null;
+
+												const earlyMs = ((eventData.geofence_early_checkin_allowed || 0) || 0) * 60 * 1000;
+												const lateMs = ((eventData.geofence_late_checkin_allowed || 0) || 0) * 60 * 1000;
+												const windowStart = new Date(start.getTime() - earlyMs);
+												const windowEnd = end ? new Date(end.getTime() + lateMs) : new Date(start.getTime() + lateMs * 2);
+												const canCheckIn = now >= windowStart && now <= windowEnd;
+
 												navigator.geolocation.getCurrentPosition((position) => {
 													const userLat = position.coords.latitude;
 													const userLng = position.coords.longitude;
 													const centerLat = eventData.latitude || 7.0731;
 													const centerLng = eventData.longitude || 125.6128;
 													const radius = eventData.geofence_radius || 100;
-													
+
 													const R = 6371e3;
 													const dLat = (userLat - centerLat) * Math.PI / 180;
 													const dLng = (userLng - centerLng) * Math.PI / 180;
@@ -1590,15 +1678,27 @@ const [cameraReady, setCameraReady] = useState(false);
 													          Math.sin(dLng/2) * Math.sin(dLng/2);
 													const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 													const distance = R * c;
-													
 													const isInside = distance <= radius;
-													
-													alert(`Your Location:\n${userLat.toFixed(6)}, ${userLng.toFixed(6)}\n\nDistance from venue: ${Math.round(distance)}m\nGeofence radius: ${radius}m\n\nStatus: ${isInside ? "✓ INSIDE the geofence - You can check in!" : "✗ OUTSIDE the geofence - Move closer to the venue"}`);
+
+													const lines = [
+														`Time: ${now.toLocaleTimeString()}`,
+														`Start: ${start.toLocaleTimeString()}`,
+														...(end ? [`End: ${end.toLocaleTimeString()}`] : []),
+														`Check-in Window: ${windowStart.toLocaleTimeString()} - ${windowEnd.toLocaleTimeString()}`,
+														`Currently Allowed: ${canCheckIn ? "Yes" : "No"}`,
+														``,
+														`Your Location:\n${userLat.toFixed(6)}, ${userLng.toFixed(6)}`,
+														`Distance from venue: ${Math.round(distance)}m`,
+														`Geofence radius: ${radius}m`,
+														``,
+														`Status: ${isInside && canCheckIn ? "✓ INSIDE + IN WINDOW - You can check in!" : "✗ Outside geofence or outside check-in window"}`,
+													];
+													alert(lines.join("\n"));
 												}, (error) => {
 													alert("Could not get your location. Please enable location permissions in your browser.");
 												});
-											} else {
-												alert("Geolocation is not supported by your browser.");
+											} catch (error) {
+													alert("Geofence check failed: " + error.message);
 											}
 										}}
 										className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"

@@ -63,6 +63,15 @@ export async function GET(request) {
       }, { status: 500 });
     }
 
+    const eventResult = await supabase
+      .from("events")
+      .select("start_time, geofence_late_checkin_threshold_minutes")
+      .eq("event_id", eventIdNumber)
+      .maybeSingle();
+
+    const eventStart = eventResult.data?.start_time || null;
+    const lateThreshold = Number(eventResult.data?.geofence_late_checkin_threshold_minutes || 15);
+
     const participantIds = Array.from(new Set((rows || [])
       .map((r) => r.participant_id)
       .filter((id) => Number.isInteger(id))));
@@ -79,10 +88,51 @@ export async function GET(request) {
       });
     }
 
+    let attendanceByParticipant = {};
+    if (participantIds.length > 0) {
+      const { data: attendanceRecords } = await supabase
+        .from("attendance")
+        .select("participant_id, event_id, check_in_time, check_out_time, verified")
+        .in("participant_id", participantIds)
+        .eq("event_id", eventIdNumber);
+
+      for (const pid of participantIds) {
+        const logs = (attendanceRecords || []).filter((row) => row.participant_id === pid);
+        const totalEvents = logs.length;
+        const verifiedCount = logs.filter((log) => log.verified).length;
+        const attendanceRate = totalEvents > 0 ? Math.round((verifiedCount / totalEvents) * 100) : 0;
+
+        let lateCount = 0;
+        if (eventStart) {
+          const [hours, minutes] = String(eventStart).split(":").map(Number);
+          const eventStartDate = new Date();
+          eventStartDate.setHours(hours || 0, minutes || 0, 0, 0);
+          const lateCutoff = new Date(eventStartDate.getTime() + lateThreshold * 60 * 1000);
+
+          for (const log of logs) {
+            if (!log.check_in_time) continue;
+            const checkInTime = new Date(log.check_in_time);
+            if (checkInTime > lateCutoff) {
+              lateCount += 1;
+            }
+          }
+        }
+
+        attendanceByParticipant[pid] = {
+          attendanceRate,
+          totalEventsAttended: verifiedCount,
+          totalEventsRegistered: totalEvents,
+          absences: Math.max(0, totalEvents - verifiedCount),
+          lateCheckIns: lateCount,
+        };
+      }
+    }
+
     const normalized = (rows || [])
       .filter((reg) => participantsById[reg.participant_id] !== undefined)
       .map((reg) => {
         const participant = participantsById[reg.participant_id] || {};
+        const cluster = attendanceByParticipant[reg.participant_id] || null;
 
         return {
           id: reg.id,
@@ -97,7 +147,10 @@ export async function GET(request) {
           email: participant.email || null,
           rfid: participant.rfid || null,
           performanceScore: Number.isFinite(reg.performanceScore) ? Math.round(reg.performanceScore) : null,
-          metrics: reg.metrics || null,
+          metrics: cluster,
+          lateThreshold,
+          lateCount: cluster?.lateCheckIns || 0,
+          isFrequentlyLate: (cluster?.lateCheckIns || 0) >= lateThreshold,
         };
       });
 
