@@ -5,6 +5,9 @@ import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../components/SiteHeader";
 import Link from "next/link";
 import bcrypt from "bcryptjs";
+import { signInWithGoogle } from "@/utils/auth/googleAuth";
+import { getOAuthNotice } from "@/utils/auth/notices";
+import { AuthNotice } from "../components/AuthNotice";
 
 function SectionLabel({ children }) {
 	return (
@@ -73,9 +76,29 @@ function RegisterModeButton({ mode, label, icon, isActive, onClick }) {
 	);
 }
 
+function GoogleButton({ onClick, disabled, label = "Continue with Google" }) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			disabled={disabled}
+			className="flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+		>
+			<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+				<path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303C33.654 32.657 29.223 36 24 36c-5.522 0-10-4.478-10-10s4.478-10 10-10c2.761 0 5.246 1.127 7.054 2.946l5.657-5.657C34.046 10.846 29.268 8 24 8 12.955 8 4 16.955 4 28s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.651-.389-3.917z" />
+				<path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 16.108 18.961 13 24 13c2.761 0 5.246 1.127 7.054 2.946l5.657-5.657C34.046 10.846 29.268 8 24 8 12.955 8 4 16.955 4 28c0 3.591.868 6.979 2.403 9.978l6.571-4.819C11.511 30.342 11 29.214 11 28s.511-2.342 1.403-3.309z" />
+				<path fill="#4CAF50" d="M24 48c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 38.977 26.715 40 24 40c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 43.556 16.227 48 24 48z" />
+				<path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-1.005 2.947-3.303 5.236-6.197 6.571l6.19 5.238C42.022 35.026 44 31.762 44 28c0-2.761-.672-5.358-1.389-7.917z" />
+			</svg>
+			{label}
+		</button>
+	);
+}
+
 export default function RegisterPage() {
 	const [registerMode, setRegisterMode] = useState("organization");
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 	const [submitMessage, setSubmitMessage] = useState("");
 
 	const [formState, setFormState] = useState({
@@ -105,6 +128,17 @@ export default function RegisterPage() {
 
 	const validatePassword = (password) => {
 		return password.length >= 8;
+	};
+
+	const handleGoogleSignUp = async () => {
+		setIsGoogleLoading(true);
+		setSubmitMessage("");
+		try {
+			await signInWithGoogle(registerMode, "signup");
+		} catch (error) {
+			setSubmitMessage(`Google sign-up error: ${error.message}`);
+			setIsGoogleLoading(false);
+		}
 	};
 
 	const handleSubmit = async (event) => {
@@ -168,16 +202,17 @@ export default function RegisterPage() {
 				// Hash password
 				const hashedPassword = await bcrypt.hash(formState.orgPassword, 10);
 
-				// Create login record
+				// Create login record (pending until admin approves)
 				const { data: loginData, error: loginError } = await supabase
 					.from("login_details")
 					.insert([
 						{
 							username: formState.orgUsername,
-							email_address: formState.orgEmail,
+							email_address: formState.orgEmail.trim().toLowerCase(),
 							hashed_password: hashedPassword,
 							org_name: formState.orgName,
-							login_type: 1, // 1 for organization
+							login_type: 1,
+							account_status: "pending",
 						},
 					])
 					.select()
@@ -195,7 +230,9 @@ export default function RegisterPage() {
 					return;
 				}
 
-				setSubmitMessage("✓ Organization account created successfully! Redirecting to login...");
+				setSubmitMessage(
+					"Organization account submitted! An EventFlow admin must approve it before you can sign in. Redirecting to login..."
+				);
 				setTimeout(() => {
 					window.location.href = "/login";
 				}, 1500);
@@ -355,6 +392,21 @@ export default function RegisterPage() {
 										</p>
 									</div>
 
+									<div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-slate-700">
+										Organization accounts require admin approval before you can sign in. After approval, you can use Google or email/password. Events you create also need separate admin approval.
+									</div>
+
+									<GoogleButton
+										onClick={handleGoogleSignUp}
+										disabled={isSubmitting || isGoogleLoading}
+										label={isGoogleLoading ? "Redirecting to Google…" : "Sign up with Google"}
+									/>
+
+									<div className="relative text-center text-xs uppercase tracking-[0.2em] text-slate-400">
+										<span className="relative z-10 bg-white px-3">or register with email</span>
+										<div className="absolute inset-x-0 top-1/2 -z-0 h-px bg-slate-200" />
+									</div>
+
 									<Field label="Organization Name">
 										<input
 											type="text"
@@ -444,6 +496,17 @@ export default function RegisterPage() {
 										<p className="mt-2 text-sm leading-6 text-slate-600">
 											Register as a participant to attend events and register your biometrics.
 										</p>
+									</div>
+
+									<GoogleButton
+										onClick={handleGoogleSignUp}
+										disabled={isSubmitting || isGoogleLoading}
+										label={isGoogleLoading ? "Redirecting to Google…" : "Sign up with Google"}
+									/>
+
+									<div className="relative text-center text-xs uppercase tracking-[0.2em] text-slate-400">
+										<span className="relative z-10 bg-white px-3">or register with email</span>
+										<div className="absolute inset-x-0 top-1/2 -z-0 h-px bg-slate-200" />
 									</div>
 
 									<div className="grid gap-5 sm:grid-cols-2">

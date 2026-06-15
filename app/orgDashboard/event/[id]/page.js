@@ -624,7 +624,34 @@ const [cameraReady, setCameraReady] = useState(false);
 					return;
 				}
 
-				setScanResult({ success: true, message: `${participant.name} checked out.` });
+				let checkoutMessage = `${participant.name} checked out.`;
+				try {
+					const certResponse = await fetch("/api/certificates/issue", {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							eventId,
+							participantId: participant.participant_id,
+							attendanceId: existingAttendanceId.attendance_id,
+						}),
+					});
+					const certResult = await certResponse.json().catch(() => ({}));
+
+					if (certResponse.ok && certResult.issued && certResult.emailSent) {
+						checkoutMessage = `${participant.name} checked out. Certificate emailed to ${certResult.recipientEmail}.`;
+					} else if (certResponse.ok && certResult.alreadySent) {
+						checkoutMessage = `${participant.name} checked out. Certificate was already sent.`;
+					} else if (certResult.ineligible) {
+						checkoutMessage = `${participant.name} checked out. Not eligible for certificate: ${certResult.reason}`;
+					} else if (certResult.details?.includes("BREVO")) {
+						checkoutMessage = `${participant.name} checked out. Eligible, but email failed — check Brevo configuration.`;
+					}
+				} catch (certError) {
+					console.error("[RFID checkout] Certificate issue error:", certError);
+					checkoutMessage = `${participant.name} checked out. Certificate could not be processed.`;
+				}
+
+				setScanResult({ success: true, message: checkoutMessage });
 			} else {
 				const { data: existingAttendanceId } = await supabase
 					.from("attendance")

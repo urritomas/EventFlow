@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../components/SiteHeader";
+import { clearSession } from "@/utils/auth/session";
 import {
 	BarChart3,
 	Users,
@@ -159,8 +160,7 @@ export default function OrgDashboard() {
 	}, [router]);
 
 	const handleLogout = () => {
-		localStorage.removeItem("isLoggedIn");
-		localStorage.removeItem("userRole");
+		clearSession();
 		setSidebarOpen(false);
 		window.location.href = "/login";
 	};
@@ -230,7 +230,13 @@ export default function OrgDashboard() {
 			const userRole = localStorage.getItem("userRole");
 
 			if (userRole === "organization") {
-				const { data: createdEvents, error: eventsError } = await supabase.from("events").select("*");
+				const orgLoginId = localStorage.getItem("loginId");
+				let eventsQuery = supabase.from("events").select("*");
+				if (orgLoginId) {
+					eventsQuery = eventsQuery.eq("org_login_id", parseInt(orgLoginId, 10));
+				}
+
+				const { data: createdEvents, error: eventsError } = await eventsQuery;
 
 				if (eventsError) {
 					console.error("Error fetching events:", eventsError);
@@ -238,11 +244,16 @@ export default function OrgDashboard() {
 					setMyEvents(createdEvents);
 				}
 
-				const { data: events, error: activeError } = await supabase
+				let activeQuery = supabase
 					.from("events")
 					.select("*")
 					.eq("is_active", true)
 					.eq("is_accepted", true);
+				if (orgLoginId) {
+					activeQuery = activeQuery.eq("org_login_id", parseInt(orgLoginId, 10));
+				}
+
+				const { data: events, error: activeError } = await activeQuery;
 
 				if (activeError) {
 					console.error("Error fetching active events:", activeError);

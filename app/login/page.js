@@ -1,11 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import Link from "next/link";
 import SiteHeader from "../components/SiteHeader";
 import bcrypt from "bcryptjs";
 import { Building2, User, Lock } from "lucide-react";
+import { signInWithGoogle } from "@/utils/auth/googleAuth";
+import { persistSession, dashboardPathForRole } from "@/utils/auth/session";
+import { getOrgBlockMessage } from "@/utils/auth/orgApproval";
+import { getOAuthNotice } from "@/utils/auth/notices";
+import { AuthNotice } from "../components/AuthNotice";
 
 function SectionLabel({ children }) {
 	return (
@@ -58,6 +64,25 @@ function Field({ label, children, hint }) {
 	);
 }
 
+function GoogleButton({ onClick, disabled, label = "Continue with Google" }) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			disabled={disabled}
+			className="flex w-full items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+		>
+			<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+				<path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303C33.654 32.657 29.223 36 24 36c-5.522 0-10-4.478-10-10s4.478-10 10-10c2.761 0 5.246 1.127 7.054 2.946l5.657-5.657C34.046 10.846 29.268 8 24 8 12.955 8 4 16.955 4 28s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.651-.389-3.917z" />
+				<path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 16.108 18.961 13 24 13c2.761 0 5.246 1.127 7.054 2.946l5.657-5.657C34.046 10.846 29.268 8 24 8 12.955 8 4 16.955 4 28c0 3.591.868 6.979 2.403 9.978l6.571-4.819C11.511 30.342 11 29.214 11 28s.511-2.342 1.403-3.309z" />
+				<path fill="#4CAF50" d="M24 48c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 38.977 26.715 40 24 40c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 43.556 16.227 48 24 48z" />
+				<path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-1.005 2.947-3.303 5.236-6.197 6.571l6.19 5.238C42.022 35.026 44 31.762 44 28c0-2.761-.672-5.358-1.389-7.917z" />
+			</svg>
+			{label}
+		</button>
+	);
+}
+
 function LoginModeButton({ mode, label, icon: Icon, isActive, onClick }) {
 	return (
 		<button
@@ -74,25 +99,77 @@ function LoginModeButton({ mode, label, icon: Icon, isActive, onClick }) {
 	);
 }
 
-export default function LoginPage() {
+const OAUTH_ERROR_MESSAGES = {
+	wrong_account_type:
+		"This email is registered under a different account type. Choose the correct login mode.",
+	auth_failed: "Google sign-in failed. Please try again.",
+	missing_code: "Sign-in was interrupted. Please try again.",
+	no_account: "No account found for this Google email. Please register first.",
+	account_exists: "An organization account with this email already exists. Sign in instead.",
+	org_account_pending:
+		"Your organization account is pending admin approval. You can sign in once an EventFlow admin approves it.",
+	org_account_rejected:
+		"Your organization account was not approved. Contact EventFlow support if you believe this is an error.",
+};
+
+function formMessageVariant(message) {
+	if (
+		message.includes("Error") ||
+		message.includes("Invalid") ||
+		message.includes("not approved") ||
+		message.includes("No account") ||
+		message.includes("pending admin")
+	) {
+		return "border border-red-200 bg-red-50 text-red-700";
+	}
+	if (message.includes("submitted") || message.includes("pending")) {
+		return "border border-amber-300 bg-amber-50 text-amber-950";
+	}
+	return "border border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
+function LoginPageInner() {
+	const searchParams = useSearchParams();
+	const oauthNotice = getOAuthNotice(searchParams);
 	const [loginMode, setLoginMode] = useState("organization");
 	const [showAdminHint, setShowAdminHint] = useState(false);
 	const [adminClicks, setAdminClicks] = useState(0);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 	const [submitMessage, setSubmitMessage] = useState("");
 
 	const [formState, setFormState] = useState({
 		// Organization
-		orgUsername: "",
+		orgEmail: "",
 		orgPassword: "",
 		// Personal
-		personalUsername: "",
+		personalEmail: "",
 		personalPassword: "",
 		// Admin
 		adminEmail: "",
 		adminPassword: "",
 		adminCode: "",
 	});
+
+	useEffect(() => {
+		setIsGoogleLoading(false);
+
+		const oauthError = searchParams.get("error");
+		const registered = searchParams.get("registered");
+		if (oauthError === "org_account_pending" && registered === "1") {
+			setLoginMode("organization");
+			setSubmitMessage(
+				"Organization account submitted! An EventFlow admin must approve it before you can sign in."
+			);
+			return;
+		}
+		if (oauthError && OAUTH_ERROR_MESSAGES[oauthError]) {
+			if (oauthError.startsWith("org_")) {
+				setLoginMode("organization");
+			}
+			setSubmitMessage(OAUTH_ERROR_MESSAGES[oauthError]);
+		}
+	}, [searchParams]);
 
 	const updateField = (field) => (event) => {
 		const value = event.target.value;
@@ -106,6 +183,22 @@ export default function LoginPage() {
 		}
 	};
 
+	const handleGoogleSignIn = async () => {
+		if (loginMode === "admin") {
+			setSubmitMessage("Admin accounts use email and password only.");
+			return;
+		}
+
+		setIsGoogleLoading(true);
+		setSubmitMessage("");
+		try {
+			await signInWithGoogle(loginMode, "login");
+		} catch (error) {
+			setSubmitMessage(`Google sign-in error: ${error.message}`);
+			setIsGoogleLoading(false);
+		}
+	};
+
 	const handleSubmit = async (event) => {
 		event.preventDefault();
 		setIsSubmitting(true);
@@ -115,89 +208,108 @@ export default function LoginPage() {
 			const supabase = createClient();
 
 			if (loginMode === "organization") {
-				// Organization login
-				if (!formState.orgUsername || !formState.orgPassword) {
-					setSubmitMessage("Please enter your username and password.");
+				if (!formState.orgEmail || !formState.orgPassword) {
+					setSubmitMessage("Please enter your email and password.");
 					setIsSubmitting(false);
 					return;
 				}
 
-				// Get user from login_details with login_type 1 (organization)
 				const { data: loginData, error: loginError } = await supabase
 					.from("login_details")
 					.select("*")
-					.eq("username", formState.orgUsername)
+					.eq("email_address", formState.orgEmail.trim().toLowerCase())
 					.eq("login_type", 1);
 
 				if (loginError || !loginData || loginData.length === 0) {
-					setSubmitMessage("Invalid username or password.");
+					setSubmitMessage("Invalid email or password.");
 					setIsSubmitting(false);
 					return;
 				}
 
 				const orgUser = loginData[0];
+				const orgBlockMessage = getOrgBlockMessage(orgUser);
 
-				// Verify password using bcrypt
+				if (!orgUser.hashed_password) {
+					setSubmitMessage(
+						orgBlockMessage ||
+							"This organization account uses Google sign-in. Click Continue with Google."
+					);
+					setIsSubmitting(false);
+					return;
+				}
+
 				const passwordMatch = await bcrypt.compare(formState.orgPassword, orgUser.hashed_password);
 
 				if (!passwordMatch) {
-					setSubmitMessage("Invalid username or password.");
+					setSubmitMessage("Invalid email or password.");
 					setIsSubmitting(false);
 					return;
 				}
 
-				localStorage.setItem("isLoggedIn", "true");
-				localStorage.setItem("userRole", "organization");
+				const orgBlockMessageAfterPassword = getOrgBlockMessage(orgUser);
+				if (orgBlockMessageAfterPassword) {
+					setSubmitMessage(orgBlockMessageAfterPassword);
+					setIsSubmitting(false);
+					return;
+				}
+
+				persistSession({
+					role: "organization",
+					loginId: orgUser.login_id,
+					email: orgUser.email_address || "",
+					orgName: orgUser.org_name || "",
+				});
+
 				setSubmitMessage(`Welcome back, ${orgUser.org_name}! Redirecting to dashboard...`);
 				setTimeout(() => {
-					window.location.href = "/orgDashboard";
+					window.location.href = dashboardPathForRole("organization");
 				}, 1500);
 			} else if (loginMode === "personal") {
-				// Personal login
-				if (!formState.personalUsername || !formState.personalPassword) {
-					setSubmitMessage("Please enter your username and password.");
+				if (!formState.personalEmail || !formState.personalPassword) {
+					setSubmitMessage("Please enter your email and password.");
 					setIsSubmitting(false);
 					return;
 				}
 
-				// Get user from login_details with login_type 2 (personal)
 				const { data: loginData, error: loginError } = await supabase
 					.from("login_details")
 					.select("*")
-					.eq("username", formState.personalUsername)
+					.eq("email_address", formState.personalEmail.trim().toLowerCase())
 					.eq("login_type", 2);
 
 				if (loginError || !loginData || loginData.length === 0) {
-					setSubmitMessage("Invalid username or password.");
+					setSubmitMessage("Invalid email or password.");
 					setIsSubmitting(false);
 					return;
 				}
 
 				const personalUser = loginData[0];
 
-				// Verify password using bcrypt
-				const passwordMatch = await bcrypt.compare(formState.personalPassword, personalUser.hashed_password);
-
-				if (!passwordMatch) {
-					setSubmitMessage("Invalid username or password.");
+				if (!personalUser.hashed_password) {
+					setSubmitMessage("This account uses Google sign-in. Click Continue with Google.");
 					setIsSubmitting(false);
 					return;
 				}
 
-				// Store login info
-				localStorage.setItem("isLoggedIn", "true");
-				localStorage.setItem("userRole", "personal");
-				localStorage.setItem("loginId", String(personalUser.login_id));
-				localStorage.setItem("firstName", personalUser.first_name || "");
-				localStorage.setItem("lastName", personalUser.last_name || "");
-				localStorage.setItem("email", personalUser.email_address || "");
-				
-				console.log("✓ Login successful for:", personalUser.first_name, personalUser.last_name);
-				console.log("✓ Stored login_id:", personalUser.login_id);
+				const passwordMatch = await bcrypt.compare(formState.personalPassword, personalUser.hashed_password);
+
+				if (!passwordMatch) {
+					setSubmitMessage("Invalid email or password.");
+					setIsSubmitting(false);
+					return;
+				}
+
+				persistSession({
+					role: "personal",
+					loginId: personalUser.login_id,
+					email: personalUser.email_address || "",
+					firstName: personalUser.first_name || "",
+					lastName: personalUser.last_name || "",
+				});
 
 				setSubmitMessage(`Welcome back, ${personalUser.first_name}! Redirecting to your dashboard...`);
 				setTimeout(() => {
-					window.location.href = "/personalDashboard";
+					window.location.href = dashboardPathForRole("personal");
 				}, 1500);
 			} else if (loginMode === "admin") {
 				// Admin login
@@ -231,11 +343,10 @@ export default function LoginPage() {
 					return;
 				}
 
-				localStorage.setItem("isLoggedIn", "true");
-				localStorage.setItem("userRole", "admin");
+				persistSession({ role: "admin", email: adminUser.email_address || "" });
 				setSubmitMessage("Admin access verified. Redirecting to admin panel...");
 				setTimeout(() => {
-					window.location.href = "/adminDashboard";
+					window.location.href = dashboardPathForRole("admin");
 				}, 1500);
 			}
 		} catch (error) {
@@ -315,6 +426,11 @@ export default function LoginPage() {
 				</section>
 
 				<section className="mx-auto max-w-2xl px-6 py-20 sm:px-10 lg:px-12">
+					{oauthNotice ? (
+						<div className="mb-6">
+							<AuthNotice notice={oauthNotice} />
+						</div>
+					) : null}
 					<Card className="border-slate-200 bg-white p-0 shadow-[0_18px_70px_rgba(15,23,42,0.08)]">
 						<form className="space-y-8 p-6 sm:p-8" onSubmit={handleSubmit}>
 							{/* Organization Login Form */}
@@ -324,16 +440,27 @@ export default function LoginPage() {
 										<p className="text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">Organization</p>
 										<h3 className="mt-3 text-2xl font-semibold text-slate-950">Event Manager Access</h3>
 										<p className="mt-2 text-sm leading-6 text-slate-600">
-											Sign in with your organization credentials.
+											Sign in with your organization Google email. New events require admin approval before going live.
 										</p>
 									</div>
 
-									<Field label="Username">
+									<GoogleButton
+										onClick={handleGoogleSignIn}
+										disabled={isSubmitting || isGoogleLoading}
+										label={isGoogleLoading ? "Redirecting to Google…" : "Continue with Google"}
+									/>
+
+									<div className="relative text-center text-xs uppercase tracking-[0.2em] text-slate-400">
+										<span className="relative z-10 bg-white px-3">or sign in with email</span>
+										<div className="absolute inset-x-0 top-1/2 -z-0 h-px bg-slate-200" />
+									</div>
+
+									<Field label="Organization Email">
 										<input
-											type="text"
-											value={formState.orgUsername}
-											onChange={updateField("orgUsername")}
-											placeholder="Your organization username"
+											type="email"
+											value={formState.orgEmail}
+											onChange={updateField("orgEmail")}
+											placeholder="name@organization.com"
 											className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
 										/>
 									</Field>
@@ -359,11 +486,7 @@ export default function LoginPage() {
 									</div>
 
 									{submitMessage && (
-										<div className={`rounded-3xl p-6 text-sm font-semibold ${
-											submitMessage.includes("Error") || submitMessage.includes("Invalid")
-												? "border border-red-200 bg-red-50 text-red-700"
-												: "border border-emerald-200 bg-emerald-50 text-emerald-700"
-										}`}>
+										<div className={`rounded-3xl p-6 text-sm font-semibold ${formMessageVariant(submitMessage)}`}>
 											{submitMessage}
 										</div>
 									)}
@@ -388,12 +511,23 @@ export default function LoginPage() {
 										</p>
 									</div>
 
-									<Field label="Username">
+									<GoogleButton
+										onClick={handleGoogleSignIn}
+										disabled={isSubmitting || isGoogleLoading}
+										label={isGoogleLoading ? "Redirecting to Google…" : "Continue with Google"}
+									/>
+
+									<div className="relative text-center text-xs uppercase tracking-[0.2em] text-slate-400">
+										<span className="relative z-10 bg-white px-3">or sign in with email</span>
+										<div className="absolute inset-x-0 top-1/2 -z-0 h-px bg-slate-200" />
+									</div>
+
+									<Field label="Email">
 										<input
-											type="text"
-											value={formState.personalUsername}
-											onChange={updateField("personalUsername")}
-											placeholder="Your username"
+											type="email"
+											value={formState.personalEmail}
+											onChange={updateField("personalEmail")}
+											placeholder="you@example.com"
 											className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white"
 										/>
 									</Field>
@@ -419,11 +553,7 @@ export default function LoginPage() {
 									</div>
 
 									{submitMessage && (
-										<div className={`rounded-3xl p-6 text-sm font-semibold ${
-											submitMessage.includes("Error") || submitMessage.includes("Invalid")
-												? "border border-red-200 bg-red-50 text-red-700"
-												: "border border-emerald-200 bg-emerald-50 text-emerald-700"
-										}`}>
+										<div className={`rounded-3xl p-6 text-sm font-semibold ${formMessageVariant(submitMessage)}`}>
 											{submitMessage}
 										</div>
 									)}
@@ -479,11 +609,7 @@ export default function LoginPage() {
 									</div>
 
 									{submitMessage && (
-										<div className={`rounded-3xl p-6 text-sm font-semibold ${
-											submitMessage.includes("Error") || submitMessage.includes("Invalid")
-												? "border border-red-200 bg-red-50 text-red-700"
-												: "border border-amber-200 bg-amber-50 text-amber-700"
-										}`}>
+										<div className={`rounded-3xl p-6 text-sm font-semibold ${formMessageVariant(submitMessage)}`}>
 											{submitMessage}
 										</div>
 									)}
@@ -517,5 +643,13 @@ export default function LoginPage() {
 				}
 			`}</style>
 		</>
+	);
+}
+
+export default function LoginPage() {
+	return (
+		<Suspense fallback={null}>
+			<LoginPageInner />
+		</Suspense>
 	);
 }

@@ -23,6 +23,7 @@ function Sidebar({ isOpen, onClose, onLogout }) {
 	const menuItems = [
 		{ label: "Dashboard", icon: BarChart3, href: "#dashboard" },
 		{ label: "Event Approvals", icon: CheckCircle2, href: "#approvals" },
+		{ label: "Org Accounts", icon: Users, href: "#org-accounts" },
 		{ label: "Users", icon: Users, href: "#users" },
 		{ label: "Analytics", icon: TrendingUp, href: "#analytics" },
 	];
@@ -159,7 +160,8 @@ export default function AdminDashboard() {
 	const [activeEvents, setActiveEvents] = useState([]);
 	const [users, setUsers] = useState([]);
 	const [applications, setApplications] = useState([]);
-	const [stats, setStats] = useState({ totalEvents: 0, pendingApprovals: 0, registeredUsers: 0, activeOrgs: 0 });
+	const [pendingOrgs, setPendingOrgs] = useState([]);
+	const [stats, setStats] = useState({ totalEvents: 0, pendingApprovals: 0, registeredUsers: 0, activeOrgs: 0, pendingOrgs: 0 });
 	const [currentSection, setCurrentSection] = useState("dashboard");
 	const [editingEvent, setEditingEvent] = useState(null);
 	const [editMode, setEditMode] = useState("view"); // "view" or "edit"
@@ -239,7 +241,30 @@ export default function AdminDashboard() {
 					status: "Active"
 				}));
 				setUsers(userList);
-				setStats(prev => ({ ...prev, registeredUsers: participants.length, activeOrgs: loginDetails.filter(l => l.login_type === 1).length }));
+
+				const orgAccounts = loginDetails.filter((l) => l.login_type === 1);
+				const pendingOrgAccounts = orgAccounts.filter((l) => l.account_status === "pending");
+				const approvedOrgAccounts = orgAccounts.filter(
+					(l) => !l.account_status || l.account_status === "approved"
+				);
+
+				setPendingOrgs(
+					pendingOrgAccounts.map((org) => ({
+						id: org.login_id,
+						orgName: org.org_name || "Unnamed organization",
+						email: org.email_address,
+						username: org.username,
+						authProvider: org.auth_provider || "password",
+						status: org.account_status,
+					}))
+				);
+
+				setStats(prev => ({
+					...prev,
+					registeredUsers: participants.length,
+					activeOrgs: approvedOrgAccounts.length,
+					pendingOrgs: pendingOrgAccounts.length,
+				}));
 			}
 
 			if (apps) {
@@ -292,6 +317,18 @@ export default function AdminDashboard() {
 					},
 					() => {
 						console.log("Participants changed - refreshing");
+						fetchData();
+					}
+				)
+				.on(
+					"postgres_changes",
+					{
+						event: "*",
+						schema: "public",
+						table: "login_details",
+					},
+					() => {
+						console.log("Login details changed - refreshing");
 						fetchData();
 					}
 				)
@@ -531,6 +568,56 @@ export default function AdminDashboard() {
 		}
 	};
 
+	const approveOrgAccount = async (loginId) => {
+		if (!window.confirm("Approve this organization account? They will be able to sign in immediately.")) {
+			return;
+		}
+
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("login_details")
+				.update({ account_status: "approved" })
+				.eq("login_id", loginId)
+				.eq("login_type", 1);
+
+			if (error) {
+				alert(`Error approving organization: ${error.message}`);
+				return;
+			}
+
+			alert("Organization account approved.");
+			await fetchData();
+		} catch (error) {
+			alert(`Error approving organization: ${error.message}`);
+		}
+	};
+
+	const rejectOrgAccount = async (loginId) => {
+		if (!window.confirm("Reject this organization account? They will not be able to sign in.")) {
+			return;
+		}
+
+		try {
+			const supabase = createClient();
+			const { error } = await supabase
+				.from("login_details")
+				.update({ account_status: "rejected" })
+				.eq("login_id", loginId)
+				.eq("login_type", 1);
+
+			if (error) {
+				alert(`Error rejecting organization: ${error.message}`);
+				return;
+			}
+
+			alert("Organization account rejected.");
+			await fetchData();
+		} catch (error) {
+			alert(`Error rejecting organization: ${error.message}`);
+		}
+	};
+
 	const updateEventStatus = async (eventId, isActive, isAccepted) => {
 		console.log("updateEventStatus called with:", { eventId, isActive, isAccepted });
 		try {
@@ -628,7 +715,7 @@ export default function AdminDashboard() {
 							<StatCard title="Total Events" value={stats.totalEvents} trend="+12 this month" icon={BarChart3} />
 							<StatCard title="Pending Approvals" value={stats.pendingApprovals} trend="Needs attention" icon={CheckCircle2} />
 							<StatCard title="Registered Users" value={stats.registeredUsers} trend="+45 this week" icon={Users} />
-							<StatCard title="Active Organizations" value={stats.activeOrgs} trend="+2 new" icon={TrendingUp} />
+							<StatCard title="Pending Org Accounts" value={stats.pendingOrgs} trend="Needs approval" icon={Users} />
 							</div>
 						</section>
 
@@ -836,6 +923,66 @@ export default function AdminDashboard() {
 								{eventApprovals.length === 0 && (
 									<p style={{ color: "var(--text-muted)" }} className="text-center py-8">
 										No pending approvals
+									</p>
+								)}
+							</div>
+						</section>
+
+						{/* Organization Account Approvals */}
+						<section id="org-accounts" className="space-y-4">
+							<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
+								Organization Account Approvals ({pendingOrgs.length})
+							</h2>
+							<div className="space-y-3">
+								{pendingOrgs.map((org) => (
+									<div
+										key={org.id}
+										className="rounded-lg border p-4"
+										style={{
+											backgroundColor: "var(--surface)",
+											borderColor: "var(--border-subtle)",
+										}}
+									>
+										<div className="flex items-start justify-between gap-4">
+											<div className="flex-1">
+												<h3 className="font-semibold" style={{ color: "var(--foreground)" }}>
+													{org.orgName}
+												</h3>
+												<p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+													Email: {org.email}
+												</p>
+												<p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+													Username: {org.username} | Sign-up: {org.authProvider}
+												</p>
+											</div>
+											<div className="flex gap-2">
+												<button
+													onClick={() => approveOrgAccount(org.id)}
+													className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+													style={{
+														backgroundColor: "rgba(16, 185, 129, 0.15)",
+														color: "#10b981",
+													}}
+												>
+													Approve Account
+												</button>
+												<button
+													onClick={() => rejectOrgAccount(org.id)}
+													className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+													style={{
+														backgroundColor: "rgba(239, 68, 68, 0.15)",
+														color: "#ef4444",
+													}}
+												>
+													Reject
+												</button>
+											</div>
+										</div>
+									</div>
+								))}
+								{pendingOrgs.length === 0 && (
+									<p style={{ color: "var(--text-muted)" }} className="text-center py-8">
+										No pending organization accounts
 									</p>
 								)}
 							</div>

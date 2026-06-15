@@ -44,6 +44,9 @@ Required environment variables (set in `.env.local` during local development or 
 - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL (public)
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — anon/public key (public)
 - `SUPABASE_SERVICE_ROLE_KEY` — service role key (secret, server-only)
+- `BREVO_API_KEY` — Brevo transactional email API key (secret, server-only)
+- `BREVO_SENDER_EMAIL` — verified sender email in Brevo (e.g. certificates@yourdomain.com)
+- `BREVO_SENDER_NAME` — optional sender display name (defaults to EventFlow)
 
 Example `.env.local` (DO NOT commit this file):
 

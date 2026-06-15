@@ -176,11 +176,17 @@ export default function PerformanceRegistrationsPage() {
 	};
 
 	const loadEvents = async () => {
-		const supabase = createClient();
-		const { data } = await supabase
-			.from("events")
-			.select("event_id, event_name, event_date")
-			.order("event_date", { ascending: true });
+			const supabase = createClient();
+			const orgLoginId = localStorage.getItem("loginId");
+
+			let eventsQuery = supabase
+				.from("events")
+				.select("event_id, event_name, event_date")
+				.order("event_date", { ascending: true });
+			if (orgLoginId) {
+				eventsQuery = eventsQuery.eq("org_login_id", parseInt(orgLoginId, 10));
+			}
+			const { data } = await eventsQuery;
 
 		if (data) {
 			setMyEvents(data);

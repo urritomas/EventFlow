@@ -195,7 +195,7 @@ const [location, setLocation] = useState({ lat: null, lng: null });
 
 			const supabase = createClient();
 
-			// Create event with column mapping matching existing Supabase table
+			const orgLoginId = localStorage.getItem("loginId");
 			const eventPayload = {
 				event_name: formData.eventName,
 				event_type: formData.eventType || "General",
@@ -221,6 +221,10 @@ const [location, setLocation] = useState({ lat: null, lng: null });
 				geofence_checkout_window:
 					(parseInt(formData.geofenceEarlyCheckoutMinutes || "0", 10) || 0) + (parseInt(formData.geofenceLateCheckoutMinutes || "0", 10) || 0),
 			};
+
+			if (orgLoginId) {
+				eventPayload.org_login_id = parseInt(orgLoginId, 10);
+			}
 
 			console.log("Creating event with payload:", eventPayload);
 
