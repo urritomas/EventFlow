@@ -341,30 +341,28 @@ export default function PersonalDashboard() {
 		setIsRegistering(true);
 
 		try {
-			const supabase = createClient();
-			const { data, error } = await supabase
-				.from("event_participants")
-				.insert({
-					event_id: selectedEvent.event_id,
-					participant_id: participantId,
-					registered_at: new Date().toISOString(),
-				})
-				.select("*");
+			const response = await fetch("/api/register-event", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					eventId: selectedEvent.event_id,
+					participantId: participantId,
+				}),
+			});
 
-			console.log("[Register] insert result:", { data, error, eventId: selectedEvent?.event_id, participantId });
+			const result = await response.json();
 
-			if (error) {
-				console.error("[Register] Registration error:", error);
-				setRegistrationMessage("Error: " + error.message);
-			} else {
-				setIsRegistered(true);
-				setShowRFIDStep(true);
-				setRegistrationMessage("✓ Event registration submitted! Now register your RFID card.");
-
-				const newRegisteredIds = new Set(userRegisteredEventIds);
-				newRegisteredIds.add(selectedEvent.event_id);
-				setUserRegisteredEventIds(newRegisteredIds);
+			if (!response.ok || !result.ok) {
+				throw new Error(result.error || result.details || "Registration failed");
 			}
+
+			setIsRegistered(true);
+			setShowRFIDStep(true);
+			setRegistrationMessage("✓ Event registration submitted! Now register your RFID card.");
+
+			const newRegisteredIds = new Set(userRegisteredEventIds);
+			newRegisteredIds.add(selectedEvent.event_id);
+			setUserRegisteredEventIds(newRegisteredIds);
 		} catch (error) {
 			console.error("[Register] Catch error:", error);
 			setRegistrationMessage("Error: " + error.message);
@@ -520,42 +518,44 @@ export default function PersonalDashboard() {
 
 	useEffect(() => {
 		const fetchData = async () => {
-			const supabase = createClient();
 			const userRole = localStorage.getItem("userRole");
 
 			if (userRole === "personal") {
-				// Fetch ALL events data from the events table
-				const { data: events } = await supabase
-					.from("events")
-					.select("*")
-					.order("event_date", { ascending: true });
+				try {
+					const eventsRes = await fetch(`/api/admin/events?action=public-events`);
+					const eventsJson = await eventsRes.json();
+					const events = eventsJson.data || [];
 
-				const { data: attendance } = await supabase
-					.from("attendance_logs")
-					.select("*");
+					if (!eventsRes.ok) {
+						console.error("[PersonalDashboard] API error:", eventsJson.error);
+					} else if (events) {
+						// Set upcoming events directly from database
+						setUpcomingEvents(events);
+						setRegisteredEvents(events);
+						setStats(prev => ({ ...prev, registered: events.length }));
 
-				if (events) {
-					// Set upcoming events directly from database
-					setUpcomingEvents(events);
-					setRegisteredEvents(events);
-					setStats(prev => ({ ...prev, registered: events.length }));
-				}
+						// Generate certificates based on events
+						const certs = events.slice(0, 3).map((e, i) => ({
+							id: i + 1,
+							title: `${e.event_name} Completion`,
+							event: e.event_name,
+							date: e.event_date
+						}));
+						setCertificates(certs);
+						setStats(prev => ({ ...prev, certificates: certs.length }));
+					}
 
-				if (attendance) {
-					const avgAttendance = attendance.length > 0 ? Math.floor((attendance.filter(a => a.verified).length / attendance.length) * 100) : 0;
-					setStats(prev => ({ ...prev, attendance: avgAttendance }));
-				}
+					const supabase = createClient();
+					const { data: attendance } = await supabase
+						.from("attendance")
+						.select("*");
 
-				// Generate certificates based on events
-				if (events) {
-					const certs = events.slice(0, 3).map((e, i) => ({
-						id: i + 1,
-						title: `${e.event_name} Completion`,
-						event: e.event_name,
-						date: e.event_date
-					}));
-					setCertificates(certs);
-					setStats(prev => ({ ...prev, certificates: certs.length }));
+					if (attendance) {
+						const avgAttendance = attendance.length > 0 ? Math.floor((attendance.filter(a => a.verified).length / attendance.length) * 100) : 0;
+						setStats(prev => ({ ...prev, attendance: avgAttendance }));
+					}
+				} catch (error) {
+					console.error("[PersonalDashboard] fetchData error:", error);
 				}
 			}
 		};

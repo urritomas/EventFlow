@@ -25,5 +25,6 @@ create table public.events (
   estimated_scope integer,
   status text default 'pending_approval',
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time zone default timezone('utc'::text, now())
+  updated_at timestamp with time zone default timezone('utc'::text, now()),
+  org_login_id bigint null
 );

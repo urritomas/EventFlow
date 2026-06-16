@@ -33,57 +33,72 @@ function LocationMarker({ position, readonly, onLocationSelect }) {
 }
 
 export default function LocationPickerMap({
-  onLocationSelect,
-  radius = 100,
-  initialLocation,
-  readonly = false,
+	onLocationSelect,
+	radius = 100,
+	initialLocation,
+	readonly = false,
 }) {
-  const [position, setPosition] = useState(initialLocation || null);
-  const isInitializedRef = useRef(false);
+	const [position, setPosition] = useState(initialLocation || null);
+	const [mounted, setMounted] = useState(false);
+	const isInitializedRef = useRef(false);
 
-  // Only sync initialLocation on first render
-  useEffect(() => {
-    if (!isInitializedRef.current && initialLocation) {
-      setPosition(initialLocation);
-      isInitializedRef.current = true;
-    }
-  }, []);
+	useEffect(() => {
+		setMounted(true);
+		if (!isInitializedRef.current && initialLocation) {
+			setPosition(initialLocation);
+			isInitializedRef.current = true;
+		}
+	}, []);
 
-  // Calculate center: convert {lat, lng} to [lat, lng] array for Leaflet
-  const center = position ? [position.lat, position.lng] : [7.0731, 125.6128];
-  const circlePos = position ? [position.lat, position.lng] : null;
+	if (!mounted) {
+		return (
+			<div
+				style={{
+					height: "350px",
+					width: "100%",
+					borderRadius: "12px",
+					backgroundColor: "var(--surface-soft)",
+					border: "1px solid var(--border-subtle)",
+				}}
+			/>
+		);
+	}
 
-  return (
-    <MapContainer
-      center={center}
-      zoom={15}
-      style={{ height: "350px", width: "100%", borderRadius: "12px" }}
-    >
-      <TileLayer
-        attribution='&copy; OpenStreetMap contributors'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+	// Calculate center: convert {lat, lng} to [lat, lng] array for Leaflet
+	const center = position ? [position.lat, position.lng] : [7.0731, 125.6128];
+	const circlePos = position ? [position.lat, position.lng] : null;
 
-      <LocationMarker 
-        position={position} 
-        readonly={readonly} 
-        onLocationSelect={(pos) => {
-          setPosition(pos);
-          onLocationSelect && onLocationSelect(pos);
-        }}
-      />
+	return (
+		<MapContainer
+			center={center}
+			zoom={15}
+			style={{ height: "350px", width: "100%", borderRadius: "12px" }}
+		>
+			<TileLayer
+				attribution='&copy; OpenStreetMap contributors'
+				url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+			/>
 
-      {circlePos && (
-        <Circle
-          center={circlePos}
-          radius={radius}
-          pathOptions={{
-            color: "blue",
-            fillColor: "blue",
-            fillOpacity: 0.2,
-          }}
-        />
-      )}
-    </MapContainer>
-  );
+			<LocationMarker
+				position={position}
+				readonly={readonly}
+				onLocationSelect={(pos) => {
+					setPosition(pos);
+					onLocationSelect && onLocationSelect(pos);
+				}}
+			/>
+
+			{circlePos && (
+				<Circle
+					center={circlePos}
+					radius={radius}
+					pathOptions={{
+						color: "blue",
+						fillColor: "blue",
+						fillOpacity: 0.2,
+					}}
+				/>
+			)}
+		</MapContainer>
+	);
 }

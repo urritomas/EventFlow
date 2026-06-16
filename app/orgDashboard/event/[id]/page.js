@@ -173,15 +173,29 @@ const [cameraReady, setCameraReady] = useState(false);
 
 		const fetchEventData = async () => {
 			try {
-				const supabase = createClient();
-				const { data: event, error } = await supabase
-					.from("events")
-					.select("*")
-					.eq("event_id", eventId)
-					.single();
+				const orgLoginId = localStorage.getItem("loginId");
+				const headers = new Headers();
+				headers.set("Content-Type", "application/json");
+				if (orgLoginId) {
+					headers.set("x-org-login-id", orgLoginId);
+				}
 
-				if (error) throw error;
+				const eventsRes = await fetch(`/api/admin/events?action=org-events`, { headers });
+				const eventsJson = await eventsRes.json();
+				const createdEvents = eventsJson.data || [];
+
+				if (!eventsRes.ok) {
+					console.error("[EventDetail] API error:", eventsJson.error);
+					throw new Error(eventsJson.error?.message || "Failed to load event");
+				}
+
+				const event = (createdEvents || []).find(e => String(e.event_id) === String(eventId) || String(e.id) === String(eventId));
+				if (!event) {
+					throw new Error("Event not found for this organization");
+				}
 				setEventData(event);
+
+				const supabase = createClient();
 
 				// Fetch attendees with check-in and check-out times
 				const { data: attendanceData } = await supabase

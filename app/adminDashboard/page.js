@@ -170,19 +170,11 @@ export default function AdminDashboard() {
 	// Create fetchData as a useCallback so it can be called from anywhere
 	const fetchData = useCallback(async () => {
 		console.log("Fetching data...");
-		const supabase = createClient();
 
 		try {
-			// Fetch all events
-			const { data: events, error: eventsError } = await supabase
-				.from("events")
-				.select("*")
-				.order("event_date", { ascending: false });
-
-			if (eventsError) {
-				console.error("Error fetching events:", eventsError);
-				return;
-			}
+			const eventsRes = await fetch('/api/admin/events');
+			const eventsJson = await eventsRes.json();
+			const events = eventsJson.data || [];
 
 			// Store all events for reference
 			if (events) {
@@ -215,6 +207,8 @@ export default function AdminDashboard() {
 				}));
 			}
 
+			const supabase = createClient();
+			
 			// Fetch all participants (users)
 			const { data: participants } = await supabase
 				.from("participants")

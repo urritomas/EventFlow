@@ -231,55 +231,57 @@ export default function OrgDashboard() {
 
 			if (userRole === "organization") {
 				const orgLoginId = localStorage.getItem("loginId");
-				let eventsQuery = supabase.from("events").select("*");
-				if (orgLoginId) {
-					eventsQuery = eventsQuery.eq("org_login_id", parseInt(orgLoginId, 10));
-				}
+				const loginIdNum = orgLoginId ? parseInt(orgLoginId, 10) : NaN;
 
-				const { data: createdEvents, error: eventsError } = await eventsQuery;
-
-				if (eventsError) {
-					console.error("Error fetching events:", eventsError);
-				} else if (createdEvents) {
-					setMyEvents(createdEvents);
-				}
-
-				let activeQuery = supabase
-					.from("events")
-					.select("*")
-					.eq("is_active", true)
-					.eq("is_accepted", true);
-				if (orgLoginId) {
-					activeQuery = activeQuery.eq("org_login_id", parseInt(orgLoginId, 10));
-				}
-
-				const { data: events, error: activeError } = await activeQuery;
-
-				if (activeError) {
-					console.error("Error fetching active events:", activeError);
-				} else if (events) {
-					// Fetch actual registered counts from event_participants
-					const { data: allRegistrations } = await supabase
-						.from("event_participants")
-						.select("event_id");
-
-					const registrationCounts = {};
-					if (allRegistrations) {
-						allRegistrations.forEach((r) => {
-							registrationCounts[r.event_id] = (registrationCounts[r.event_id] || 0) + 1;
-						});
+				try {
+					const headers = new Headers();
+					headers.set("Content-Type", "application/json");
+					if (!isNaN(loginIdNum)) {
+						headers.set("x-org-login-id", String(loginIdNum));
 					}
 
-					const eventList = events.slice(0, 2).map((e) => ({
-						id: e.event_id,
-						name: e.event_name,
-						capacity: e.expected_attendance || 0,
-						registered: registrationCounts[e.event_id] || 0,
-						date: e.event_date,
-						with_Geo: e.with_Geo,
-					}));
-					setActiveEvents(eventList);
-					setStats((prev) => ({ ...prev, activeEvents: events.length }));
+					const eventsRes = await fetch(`/api/admin/events?action=org-events`, { headers });
+					const eventsJson = await eventsRes.json();
+					const createdEvents = eventsJson.data || [];
+
+					if (!eventsRes.ok) {
+						console.error("[OrgDashboard] API error:", eventsJson.error);
+					} else {
+						setMyEvents(createdEvents);
+					}
+
+					const activeEvents = (createdEvents || []).filter(
+						e => e.is_active && e.is_accepted
+					);
+
+					if (activeEvents.length > 0) {
+						const { data: allRegistrations } = await supabase
+							.from("event_participants")
+							.select("event_id");
+
+						const registrationCounts = {};
+						if (allRegistrations) {
+							allRegistrations.forEach((r) => {
+								registrationCounts[r.event_id] = (registrationCounts[r.event_id] || 0) + 1;
+							});
+						}
+
+						const eventList = activeEvents.slice(0, 2).map((e) => ({
+							id: e.event_id,
+							name: e.event_name,
+							capacity: e.expected_attendance || 0,
+							registered: registrationCounts[e.event_id] || 0,
+							date: e.event_date,
+							with_Geo: e.with_Geo,
+						}));
+						setActiveEvents(eventList);
+						setStats((prev) => ({ ...prev, activeEvents: activeEvents.length }));
+					} else {
+						setActiveEvents([]);
+						setStats((prev) => ({ ...prev, activeEvents: 0 }));
+					}
+				} catch (error) {
+					console.error("[OrgDashboard] fetchData error:", error);
 				}
 			}
 		};
