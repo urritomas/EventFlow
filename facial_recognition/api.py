@@ -40,8 +40,8 @@ from face_recognition_module.face_engine import FaceEngine
 # ── Config ────────────────────────────────────────────────────────────────────
 load_dotenv()
 
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
+SUPABASE_URL = os.environ["NEXT_PUBLIC_SUPABASE_URL"]
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("eventflow.api")
@@ -410,7 +410,7 @@ async def re_enroll_participant(
 
 # ── Verification ──────────────────────────────────────────────────────────────
 
-@app.post("/api/verify")
+@app.post("/api/verify-face")
 async def verify_participant(
     image:          UploadFile = File(...),
     log_attendance: bool       = Form(True),
@@ -441,8 +441,8 @@ async def verify_participant(
     if match and log_attendance:
         # Check if already has a log for this event
         existing = (
-            supabase.table("attendance_logs")
-            .select("log_id")
+            supabase.table("attendance")
+            .select("attendance_id")
             .eq("participant_id", match["participant_id"])
             .eq("event_id", event["event_id"])
             .execute()
@@ -450,11 +450,11 @@ async def verify_participant(
 
         if not existing.data:
             # First scan — check in
-            supabase.table("attendance_logs").insert({
+            supabase.table("attendance").insert({
                 "participant_id":      match["participant_id"],
                 "event_id":            event["event_id"],
                 "check_in_similarity": float(score),
-                "is_verified":         True,
+                "verified":         True,
             }).execute()
             action = "checked_in"
 
@@ -554,29 +554,29 @@ def get_attendance(event_id: Optional[int] = None):
         return {"count": 0, "records": [], "message": "No active event."}
 
     res = (
-        supabase.table("attendance_logs")
+        supabase.table("attendance")
         .select(
-            "log_id, check_in_similarity, check_out_similarity, "
-            "check_in_at, check_out_at, is_verified, "
+            "attendance_id, check_in_similarity, check_out_similarity, "
+            "check_in_time, check_out_time, verified, "
             "participants(name, rfid), "
             "events(event_name)"
         )
         .eq("event_id", filter_id)
-        .order("check_in_at", desc=True)
+        .order("check_in_time", desc=True)
         .execute()
     )
 
     records = [
         {
-            "log_id":               r["log_id"],
+            "attendance_id":               r["attendance_id"],
             "name":                 r["participants"]["name"],
             "rfid":           r["participants"]["rfid"],
             "event_name":           r["events"]["event_name"],
             "check_in_similarity":  round(r["check_in_similarity"], 4) if r["check_in_similarity"] else None,
             "check_out_similarity": round(r["check_out_similarity"], 4) if r["check_out_similarity"] else None,
-            "check_in_at":          r["check_in_at"],
-            "check_out_at":         r["check_out_at"],
-            "is_verified":          r["is_verified"],
+            "check_in_time":          r["check_in_time"],
+            "check_out_time":         r["check_out_time"],
+            "verified":          r["verified"],
         }
         for r in (res.data or [])
     ]

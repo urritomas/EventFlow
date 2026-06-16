@@ -363,7 +363,6 @@ const [cameraReady, setCameraReady] = useState(false);
 					videoRef.current.srcObject = stream;
 					setTimeout(() => {
 						setCameraReady(true);
-						setIsScanning(true); // Auto-start scanning
 					}, 500);
 				}
 			} catch (error) {
@@ -1239,23 +1238,44 @@ const [cameraReady, setCameraReady] = useState(false);
 													</div>
 												)}
 
-												<div className="flex items-center justify-between text-xs">
-													<span style={{ color: cameraReady ? "#10b981" : "var(--text-muted)" }}>
-														{cameraReady ? "Camera active • Auto-scanning" : "Starting camera..."}
-													</span>
-													{cameraReady && (
-														<button
-															onClick={stopCamera}
-															className="px-3 py-1.5 rounded-full text-xs font-semibold transition"
-															style={{
-																backgroundColor: "rgba(239, 68, 68, 0.15)",
-																color: "#ef4444",
-															}}
-														>
-															Stop
-														</button>
-													)}
-												</div>
+												<div className="flex items-center justify-between text-xs mt-2">
+  													<span style={{ color: cameraReady ? (isScanning ? "#10b981" : "#f59e0b") : "var(--text-muted)" }}>
+    													{!cameraReady
+      													? "Starting camera..."
+      													: isScanning
+      													? "Scanning active"
+      													: "Camera ready. Press Start"}
+  													</span>
+  													{cameraReady && (
+    													<div className="flex items-center gap-2">
+      													{!isScanning ? (
+        													<button
+          													onClick={() => setIsScanning(true)}
+          													className="px-3 py-1.5 rounded-full text-xs font-semibold transition hover:brightness-110"
+          													style={{
+            													backgroundColor: "rgba(16, 185, 129, 0.15)",
+            													color: "#10b981",
+            													border: "1px solid rgba(16, 185, 129, 0.3)",
+          													}}
+        													>
+          													Start
+        													</button>
+      													) : (
+        													<button
+          													onClick={() => { setIsScanning(false); setScanStatus("idle"); }}
+          													className="px-3 py-1.5 rounded-full text-xs font-semibold transition hover:brightness-110"
+          													style={{
+            													backgroundColor: "rgba(239, 68, 68, 0.15)",
+            													color: "#ef4444",
+            													border: "1px solid rgba(239, 68, 68, 0.3)",
+          													}}
+        													>
+          													Stop
+        													</button>
+      													)}
+    													</div>
+  													)}
+													</div>
 											</div>
 										)}
 

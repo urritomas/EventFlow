@@ -22,7 +22,7 @@ export async function POST(request) {
       "capture.jpg"
     );
 
-    const pythonRes = await fetch(`${FACE_API_URL}/api/verify`, {
+    const pythonRes = await fetch(`${FACE_API_URL}/api/verify-face`, {
       method: "POST",
       body:   formData,
     });

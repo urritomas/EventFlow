@@ -246,7 +246,6 @@ export default function PersonalDashboard() {
 								.insert({
 									name: fullName,
 									email: email,
-									student_id: email, // Use email as student_id
 									phone: null,
 									rfid: null
 								})
