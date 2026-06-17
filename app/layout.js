@@ -16,6 +16,13 @@ export const metadata = {
   title: "EventFlow™ | Smart Attendance Management",
   description:
     "EventFlow™ is a smart event attendance management platform with RFID, facial recognition, geofencing, and automated certificate generation.",
+  icons: [
+    {
+      rel: "icon",
+      url: "/eventflowLogo_DarkMode.png",
+      type: "image/png",
+    },
+  ],
 };
 
 export default function RootLayout({ children }) {

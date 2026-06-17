@@ -131,9 +131,9 @@ export default function LandingPage() {
 							and automated certificate generation all in one powerful platform.
 						</p>
 						<div className="mt-10 flex flex-col gap-4 sm:flex-row">
-							<Button href="/hiringDetails">Hire Us Now</Button>
-							<Button href="/login" variant="secondary">
-								Login
+							<Button href="/login">Sign In</Button>
+							<Button href="/register" variant="secondary">
+								Sign Up
 							</Button>
 						</div>
 						<div className="mt-10 grid max-w-xl grid-cols-1 gap-4 sm:grid-cols-3">

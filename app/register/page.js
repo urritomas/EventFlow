@@ -7,6 +7,7 @@ import Link from "next/link";
 import bcrypt from "bcryptjs";
 import { signInWithGoogle } from "@/utils/auth/googleAuth";
 import { getOAuthNotice } from "@/utils/auth/notices";
+import { Building2, User } from "lucide-react";
 import { AuthNotice } from "../components/AuthNotice";
 
 function SectionLabel({ children }) {
@@ -60,7 +61,7 @@ function Field({ label, children, hint }) {
 	);
 }
 
-function RegisterModeButton({ mode, label, icon, isActive, onClick }) {
+function RegisterModeButton({ mode, label, icon: Icon, isActive, onClick }) {
 	return (
 		<button
 			onClick={onClick}
@@ -70,7 +71,7 @@ function RegisterModeButton({ mode, label, icon, isActive, onClick }) {
 					: "border-white/15 bg-white/6 hover:border-emerald-300/40"
 			}`}
 		>
-			<div className="text-3xl">{icon}</div>
+			<Icon size={32} className="text-emerald-400" />
 			<span className="text-sm font-semibold text-slate-200">{label}</span>
 		</button>
 	);
@@ -354,14 +355,14 @@ export default function RegisterPage() {
 							<RegisterModeButton
 								mode="organization"
 								label="Organization Registration"
-								icon="🏢"
+								icon={Building2}
 								isActive={registerMode === "organization"}
 								onClick={() => setRegisterMode("organization")}
 							/>
 							<RegisterModeButton
 								mode="personal"
 								label="Personal Registration"
-								icon="👤"
+								icon={User}
 								isActive={registerMode === "personal"}
 								onClick={() => setRegisterMode("personal")}
 							/>

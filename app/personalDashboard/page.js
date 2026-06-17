@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import SiteHeader from "../components/SiteHeader";
+import EventFlowLogo from "../components/EventFlowLogo";
 import BehaviorAnalyticsCard from "../components/BehaviorAnalyticsCard";
 import {
 	Search,
@@ -52,18 +53,7 @@ function Sidebar({ isOpen, onClose, onLogout }) {
 					<div className="border-b border-white/10 px-6 py-5">
 						<div className="flex items-center justify-between">
 							<div className="flex items-center gap-3">
-								<div
-									className="h-9 w-9 rounded-lg flex items-center justify-center font-bold text-sm"
-									style={{ backgroundColor: "#10b981", color: "white" }}
-								>
-									EF
-								</div>
-								<span
-									className="text-sm font-bold tracking-wider"
-									style={{ color: "var(--foreground)" }}
-								>
-									EVENTFLOW
-								</span>
+								<EventFlowLogo logoClassName="h-9 w-9" sizes="36px" showText />
 							</div>
 							<button
 								onClick={onClose}

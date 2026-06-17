@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import EventFlowLogo from "./EventFlowLogo";
 
 const themeStorageKey = "eventflow-theme";
 
@@ -67,12 +68,10 @@ export default function SiteHeader({ showBack = false }) {
 			{isNavigatingHome ? (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-6 backdrop-blur-sm">
 					<div className="flex w-full max-w-md flex-col items-center rounded-4xl border border-white/10 bg-white/8 px-8 py-10 text-center text-white shadow-[0_30px_100px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-						<div className="relative mb-6 grid h-18 w-18 place-items-center">
+						<div className="relative mb-6 flex h-18 w-18 items-center justify-center">
 							<div className="absolute inset-0 animate-ping rounded-full bg-emerald-400/20" />
 							<div className="absolute inset-2 animate-spin rounded-full border border-emerald-300/40 border-t-emerald-300" />
-							<div className="relative grid h-12 w-12 place-items-center rounded-2xl bg-emerald-400/15 text-sm font-semibold text-emerald-200">
-								EF
-							</div>
+							<EventFlowLogo logoClassName="h-12 w-12" sizes="48px" showText />
 						</div>
 						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">EventFlow</p>
 						<h2 className="mt-3 text-2xl font-semibold tracking-tight">Going back to the landing page</h2>
@@ -104,8 +103,13 @@ export default function SiteHeader({ showBack = false }) {
 								Back
 							</button>
 						) : (
-							<Link href="/" className="text-sm font-semibold tracking-[0.24em]" style={{ color: "var(--header-fg)" }}>
-								EVENTFLOW
+							<Link href="/" className="flex items-center gap-1.5" aria-label="EventFlow home" style={{ color: "var(--header-fg)" }}>
+								<EventFlowLogo
+									logoClassName="h-8 w-24"
+									showText
+									sizes="(max-width: 640px) 48px, 96px"
+									textClassName="text-sm font-semibold tracking-[0.12em]"
+								/>
 							</Link>
 						)}
 						<div className="hidden text-xs uppercase tracking-[0.22em] sm:block" style={{ color: "var(--text-muted)" }}>
