@@ -159,6 +159,34 @@ const [cameraReady, setCameraReady] = useState(false);
 	const [deletingRegId, setDeletingRegId] = useState(null);
 	const [isDeletingReg, setIsDeletingReg] = useState(false);
 	const rfidInput = useRef(null);
+	const rfidProcessingRef = useRef(false);
+	const checkedInRef = useRef(new Set());
+
+	const getParticipantId = (value) =>
+		value?.participants?.participant_id ?? value?.participant_id ?? value;
+
+	const getOpenAttendance = async (supabase, participantId) => {
+		const { data } = await supabase
+			.from("attendance")
+			.select("attendance_id, verification_method, check_in_time, check_out_time")
+			.eq("event_id", eventId)
+			.eq("participant_id", participantId)
+			.is("check_out_time", null)
+			.order("check_in_time", { ascending: false })
+			.limit(1);
+
+		return data?.[0] ?? null;
+	};
+
+	const syncCheckedInStateFromAttendees = (attendanceRows) => {
+		const openCheckInIds = (attendanceRows || [])
+			.filter((row) => row.check_in_time && !row.check_out_time)
+			.map((row) => row.participant_id);
+
+		setFullyCheckedInIds(new Set(openCheckInIds));
+		setCheckedInFaceIds(new Set(openCheckInIds));
+		checkedInRef.current = new Set(openCheckInIds);
+	};
 
 	useEffect(() => {
 		const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -208,6 +236,7 @@ const [cameraReady, setCameraReady] = useState(false);
 
 				if (attendanceData) {
 					setAttendees(attendanceData);
+					syncCheckedInStateFromAttendees(attendanceData);
 				}
 
 				// Fetch registered participants from event_participants joined with participants
@@ -387,7 +416,7 @@ const [cameraReady, setCameraReady] = useState(false);
 	}, [activeTab, eventData?.with_FaceId]);
 
 	// Continuous face scanning loop
-	const captureAndVerifyFace = async (alreadyCheckedInIds) => {
+	const captureAndVerifyFace = async () => {
 		if (!videoRef.current || !canvasRef.current) return;
 
 		const video = videoRef.current;
@@ -417,26 +446,77 @@ const [cameraReady, setCameraReady] = useState(false);
 
 			if (data.verified) {
 				const participantId = data.participant_id || data.student_id;
+				const requiresBoth = Boolean(eventData?.with_FaceId && eventData?.with_RFID);
 
-				if (alreadyCheckedInIds.has(participantId)) {
+				if (checkedInRef.current.has(participantId)) {
 					setScanStatus("already_done");
-				} else {
-					const geofenceOk = await verifyGeofence(data.name);
-					if (!geofenceOk) {
+					setScanResult({ success: true, name: data.name, message: `${data.name} already checked in.` });
+					return;
+				}
+
+				const supabase = createClient();
+				const openAttendance = await getOpenAttendance(supabase, participantId);
+				if (openAttendance) {
+					checkedInRef.current = new Set([...checkedInRef.current, participantId]);
+					setFullyCheckedInIds((prev) => new Set([...prev, participantId]));
+					setCheckedInFaceIds((prev) => new Set([...prev, participantId]));
+					setPendingFaceParticipant(null);
+					setScanStatus("already_done");
+					setScanResult({ success: true, name: data.name, message: `${data.name} already checked in.` });
+					return;
+				}
+
+				const geofenceOk = await verifyGeofence(data.name);
+				if (!geofenceOk) {
+					setScanStatus("idle");
+					return;
+				}
+
+				if (requiresBoth) {
+					setScanStatus("verified");
+					setPendingFaceParticipant({ participantId, name: data.name });
+					setScanResult({
+						success: true,
+						message: `${data.name} face verified. Now scan RFID to complete check-in.`,
+						name: data.name,
+					});
+				} else if (eventData?.with_FaceId) {
+					const { error: insertError } = await supabase.from("attendance").insert({
+						event_id: eventId,
+						participant_id: participantId,
+						check_in_time: new Date().toISOString(),
+						verified: true,
+						verification_method: "face",
+					});
+
+					if (insertError) {
 						setScanStatus("idle");
+						setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
 						return;
 					}
 
-					setScanStatus("verified");
+					const { data: newAttendees } = await supabase
+						.from("attendance")
+						.select("*, participants(participant_id, name, email)")
+						.eq("event_id", eventId)
+						.order("check_in_time", { ascending: false });
+
+					if (newAttendees) {
+						setAttendees(newAttendees);
+						syncCheckedInStateFromAttendees(newAttendees);
+					}
+
+					checkedInRef.current = new Set([...checkedInRef.current, participantId]);
+					setFullyCheckedInIds((prev) => new Set([...prev, participantId]));
 					setCheckedInFaceIds((prev) => new Set([...prev, participantId]));
-					setPendingFaceParticipant({ participantId, name: data.name });
-					setScanResult({ success: true, message: `${data.name} face verified. Now scan RFID to complete check-in.`, name: data.name });
+					setPendingFaceParticipant(null);
+					setScanStatus("verified");
+					setScanResult({ success: true, message: `${data.name} checked in.`, name: data.name });
 				}
 			} else {
 				setScanStatus("rejected");
 			}
 
-			// Auto-reset after showing result
 			resetTimerRef.current = setTimeout(() => {
 				setScanStatus("idle");
 				setScanResult(null);
@@ -447,16 +527,15 @@ const [cameraReady, setCameraReady] = useState(false);
 		}
 	};
 
-	const checkedInRef = useRef(checkedInFaceIds);
 	useEffect(() => {
-		checkedInRef.current = checkedInFaceIds;
-	}, [checkedInFaceIds]);
+		checkedInRef.current = new Set([...checkedInFaceIds, ...fullyCheckedInIds]);
+	}, [checkedInFaceIds, fullyCheckedInIds]);
 
 	useEffect(() => {
 		if (!cameraReady || !isScanning || scanStatus !== "idle") return;
 
 		scanTimerRef.current = setInterval(() => {
-			captureAndVerifyFace(checkedInRef.current);
+			captureAndVerifyFace();
 		}, 2000);
 
 		return () => {
@@ -474,12 +553,14 @@ const [cameraReady, setCameraReady] = useState(false);
 		setScanStatus("idle");
 	};
 
-	const getAttendeeStatus = (attendee) => {
+	const getAttendeeStatus = (attendeeOrParticipantId) => {
 		if (!eventData) return "Not Checked In";
 
-		if (fullyCheckedInIds.has(attendee.participant_id)) return "Fully Checked In";
+		const participantId = getParticipantId(attendeeOrParticipantId);
 
-		const records = attendees.filter((a) => a.participant_id === attendee.participant_id);
+		if (fullyCheckedInIds.has(participantId)) return "Fully Checked In";
+
+		const records = attendees.filter((a) => a.participant_id === participantId);
 		if (!records.length) return "Not Checked In";
 
 		const methods = new Set(records.map((r) => r.verification_method).filter(Boolean));
@@ -505,7 +586,9 @@ const [cameraReady, setCameraReady] = useState(false);
 	const handleRFIDScan = async (e) => {
 		const value = rfidInput.current?.value?.trim();
 		if (!e || e.key !== "Enter" || !value) return;
+		if (rfidProcessingRef.current) return;
 
+		rfidProcessingRef.current = true;
 		const supabase = createClient();
 		setScanResult(null);
 
@@ -589,15 +672,9 @@ const [cameraReady, setCameraReady] = useState(false);
 			}
 
 			if (mode === "checkout") {
-				const { data: existingAttendanceId } = await supabase
-					.from("attendance")
-					.select("attendance_id")
-					.eq("event_id", eventId)
-					.eq("participant_id", participant.participant_id)
-					.is("check_out_time", null)
-					.maybeSingle();
+				const openAttendance = await getOpenAttendance(supabase, participant.participant_id);
 
-				if (!existingAttendanceId) {
+				if (!openAttendance) {
 					setScanResult({ success: false, message: `${participant.name} has no active check-in to close.` });
 					return;
 				}
@@ -612,7 +689,7 @@ const [cameraReady, setCameraReady] = useState(false);
 						check_out_verified: true,
 						check_out_method: "rfid",
 					})
-					.eq("attendance_id", existingAttendanceId.attendance_id);
+					.eq("attendance_id", openAttendance.attendance_id);
 
 				if (updateError) {
 					setScanResult({ success: false, message: "Check-out failed: " + updateError.message });
@@ -627,7 +704,7 @@ const [cameraReady, setCameraReady] = useState(false);
 						body: JSON.stringify({
 							eventId,
 							participantId: participant.participant_id,
-							attendanceId: existingAttendanceId.attendance_id,
+							attendanceId: openAttendance.attendance_id,
 						}),
 					});
 					const certResult = await certResponse.json().catch(() => ({}));
@@ -646,92 +723,98 @@ const [cameraReady, setCameraReady] = useState(false);
 					checkoutMessage = `${participant.name} checked out. Certificate could not be processed.`;
 				}
 
-setScanResult({ success: true, message: checkoutMessage });
-				} else {
-					const { data: existingAttendanceId } = await supabase
-						.from("attendance")
-						.select("attendance_id, verification_method")
-						.eq("event_id", eventId)
-						.eq("participant_id", participant.participant_id)
-						.maybeSingle();
+				setScanResult({ success: true, message: checkoutMessage });
+			} else {
+				const openAttendance = await getOpenAttendance(supabase, participant.participant_id);
 
-				if (existingAttendanceId) {
+				if (openAttendance || checkedInRef.current.has(participant.participant_id)) {
+					setPendingFaceParticipant(null);
 					setScanResult({ success: true, message: `${participant.name} is already checked in.` });
-				} else {
-					const requiresFaceThenRFID = Boolean(eventData?.with_FaceId && eventData?.with_RFID);
+					return;
+				}
 
-					if (requiresFaceThenRFID) {
-						if (!pendingFaceParticipant) {
-							setScanResult({ success: false, message: "No pending Face ID verification. Please verify face first." });
-							return;
-						}
+				const requiresFaceThenRFID = Boolean(eventData?.with_FaceId && eventData?.with_RFID);
 
-						if (pendingFaceParticipant.participantId !== participant.participant_id) {
-							setScanResult({ success: false, message: "RFID does not match the pending Face ID verification." });
-							return;
-						}
-
-						const geofenceOk = await verifyGeofence(pendingFaceParticipant.name);
-						if (!geofenceOk) return;
-
-						const { error: insertError } = await supabase.from("attendance").insert({
-							event_id: eventId,
-							participant_id: participant.participant_id,
-							check_in_time: new Date().toISOString(),
-							verified: true,
-							verification_method: "face+rfid",
-							source_rfid: trimmed,
-						});
-
-						if (insertError) {
-							setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
-							return;
-						}
-
-						setFullyCheckedInIds((prev) => new Set([...prev, participant.participant_id]));
-						setPendingFaceParticipant(null);
-						setScanResult({ success: true, message: `${participant.name} fully checked in (Face + RFID).` });
-					} else {
-						const geofenceOk = await verifyGeofence(participant.name);
-						if (!geofenceOk) return;
-
-						const { error: insertError } = await supabase.from("attendance").insert({
-							event_id: eventId,
-							participant_id: participant.participant_id,
-							check_in_time: new Date().toISOString(),
-							verified: true,
-							verification_method: "rfid",
-							source_rfid: trimmed,
-						});
-
-						if (insertError) {
-							setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
-							return;
-						}
-
-						setFullyCheckedInIds((prev) => new Set([...prev, participant.participant_id]));
-						setScanResult({ success: true, message: `${participant.name} checked in.` });
+				if (requiresFaceThenRFID) {
+					if (!pendingFaceParticipant) {
+						setScanResult({ success: false, message: "No pending Face ID verification. Please verify face first." });
+						return;
 					}
-}
+
+					if (pendingFaceParticipant.participantId !== participant.participant_id) {
+						setScanResult({ success: false, message: "RFID does not match the pending Face ID verification." });
+						return;
+					}
+
+					const geofenceOk = await verifyGeofence(pendingFaceParticipant.name);
+					if (!geofenceOk) return;
+
+					const { error: insertError } = await supabase.from("attendance").insert({
+						event_id: eventId,
+						participant_id: participant.participant_id,
+						check_in_time: new Date().toISOString(),
+						verified: true,
+						verification_method: "face+rfid",
+						source_rfid: trimmed,
+					});
+
+					if (insertError) {
+						setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
+						return;
+					}
+
+					checkedInRef.current = new Set([...checkedInRef.current, participant.participant_id]);
+					setFullyCheckedInIds((prev) => new Set([...prev, participant.participant_id]));
+					setCheckedInFaceIds((prev) => new Set([...prev, participant.participant_id]));
+					setPendingFaceParticipant(null);
+					setScanResult({ success: true, message: `${participant.name} fully checked in (Face + RFID).` });
+				} else {
+					const geofenceOk = await verifyGeofence(participant.name);
+					if (!geofenceOk) return;
+
+					const { error: insertError } = await supabase.from("attendance").insert({
+						event_id: eventId,
+						participant_id: participant.participant_id,
+						check_in_time: new Date().toISOString(),
+						verified: true,
+						verification_method: "rfid",
+						source_rfid: trimmed,
+					});
+
+					if (insertError) {
+						setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
+						return;
+					}
+
+					checkedInRef.current = new Set([...checkedInRef.current, participant.participant_id]);
+					setFullyCheckedInIds((prev) => new Set([...prev, participant.participant_id]));
+					setCheckedInFaceIds((prev) => new Set([...prev, participant.participant_id]));
+					setScanResult({ success: true, message: `${participant.name} checked in.` });
+				}
+			}
+
+			const { data: newAttendees } = await supabase
+				.from("attendance")
+				.select("*, participants(participant_id, name, email)")
+				.eq("event_id", eventId)
+				.order("check_in_time", { ascending: false });
+
+			if (newAttendees) {
+				setAttendees(newAttendees);
+				syncCheckedInStateFromAttendees(newAttendees);
+			}
+
+			if (rfidInput.current) {
+				rfidInput.current.value = "";
+				rfidInput.current.focus();
+			}
+		} catch (error) {
+			console.error("RFID scan error:", error);
+			setScanResult({ success: false, message: "Unexpected error during scan." });
+		} finally {
+			rfidProcessingRef.current = false;
 		}
-
-		const { data: newAttendees } = await supabase
-			.from("attendance")
-			.select("*, participants(participant_id, name, email)")
-			.eq("event_id", eventId)
-			.order("check_in_time", { ascending: false });
-
-		if (newAttendees) setAttendees(newAttendees);
-
-		if (rfidInput.current) {
-			rfidInput.current.value = "";
-			rfidInput.current.focus();
-		}
-	} catch (error) {
-		console.error("RFID scan error:", error);
-		setScanResult({ success: false, message: "Unexpected error during scan." });
-	}
-};
+	};
 
 	if (!isAuthorized) return null;
 	if (loading) return <div>Loading...</div>;
@@ -1558,8 +1641,7 @@ setScanResult({ success: true, message: checkoutMessage });
 											};
 
 											return sorted.map((attendee, idx) => {
-												const pid = attendee.participants?.participant_id ?? attendee.participant_id;
-												const status = getAttendeeStatus(pid);
+												const status = getAttendeeStatus(attendee);
 
 												return (
 													<tr
