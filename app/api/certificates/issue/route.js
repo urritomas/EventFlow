@@ -7,6 +7,7 @@ import {
 	renderCertificateHtml,
 } from "@/utils/certificates/renderCertificateHtml";
 import { sendBrevoEmail } from "@/utils/email/brevo";
+import { generateCertificatePdf } from "@/utils/certificates/generateCertificatePdf";
 
 function getSupabaseAdmin() {
 	const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -137,14 +138,21 @@ export async function POST(request) {
 			presencePercent: eligibility.presencePercent,
 		});
 
-		const fullEmailHtml = `${emailIntro}${certificateHtml}`;
+		// Generate PDF from certificate HTML and attach it to the email.
+		const pdfBuffer = await generateCertificatePdf(certificateHtml);
 
 		await sendBrevoEmail({
 			toEmail: participant.email,
 			toName: participant.name,
 			subject: `Your EventFlow Certificate – ${event.event_name}`,
-			htmlContent: fullEmailHtml,
+			htmlContent: emailIntro,
 			textContent: `Congratulations ${participant.name}! Your EventFlow certificate for ${event.event_name} is ready. Verification ID: ${verificationId}. On-site attendance: ${eligibility.presencePercent}%.`,
+			attachments: [
+				{
+					name: `${event.event_name.replace(/[^a-z0-9-]/gi, '_')}-${verificationId}.pdf`,
+					content: pdfBuffer.toString("base64"),
+				},
+			],
 		});
 
 		const certPayload = {
