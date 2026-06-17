@@ -147,6 +147,8 @@ const [cameraReady, setCameraReady] = useState(false);
   const [scanStatus, setScanStatus] = useState("idle");
   const [scanResult, setScanResult] = useState(null);
   const [checkedInFaceIds, setCheckedInFaceIds] = useState(new Set());
+  const [fullyCheckedInIds, setFullyCheckedInIds] = useState(new Set());
+  const [pendingFaceParticipant, setPendingFaceParticipant] = useState(null);
   const [attendees, setAttendees] = useState([]);
   const [registeredParticipants, setRegisteredParticipants] = useState([]);
   const [geofenceCenter, setGeofenceCenter] = useState({ lat: null, lng: null });
@@ -427,27 +429,8 @@ const [cameraReady, setCameraReady] = useState(false);
 
 					setScanStatus("verified");
 					setCheckedInFaceIds((prev) => new Set([...prev, participantId]));
-
-					// Record check-in to database
-					const supabase = createClient();
-					const { error } = await supabase.from("attendance").insert({
-						event_id: eventId,
-						participant_id: participantId,
-						check_in_time: new Date().toISOString(),
-						verified: true,
-						verification_method: "face",
-					});
-
-					if (!error) {
-						// Refresh attendees list
-						const { data: newAttendees } = await supabase
-							.from("attendance")
-							.select("*, participants(id, name, email)")
-							.eq("event_id", eventId)
-							.order("check_in_time", { ascending: false });
-
-						if (newAttendees) setAttendees(newAttendees);
-					}
+					setPendingFaceParticipant({ participantId, name: data.name });
+					setScanResult({ success: true, message: `${data.name} face verified. Now scan RFID to complete check-in.`, name: data.name });
 				}
 			} else {
 				setScanStatus("rejected");
@@ -494,6 +477,8 @@ const [cameraReady, setCameraReady] = useState(false);
 	const getAttendeeStatus = (attendee) => {
 		if (!eventData) return "Not Checked In";
 
+		if (fullyCheckedInIds.has(attendee.participant_id)) return "Fully Checked In";
+
 		const records = attendees.filter((a) => a.participant_id === attendee.participant_id);
 		if (!records.length) return "Not Checked In";
 
@@ -502,10 +487,7 @@ const [cameraReady, setCameraReady] = useState(false);
 		const requiresRFID = Boolean(eventData.with_RFID);
 
 		if (requiresFace && requiresRFID) {
-			const hasFace = methods.has("face");
-			const hasRFID = methods.has("rfid");
-			if (hasFace && hasRFID) return "Fully Checked In";
-			if (hasFace || hasRFID) return "Partially Checked In";
+			if (methods.has("face+rfid")) return "Fully Checked In";
 			return "Not Checked In";
 		}
 
@@ -664,56 +646,92 @@ const [cameraReady, setCameraReady] = useState(false);
 					checkoutMessage = `${participant.name} checked out. Certificate could not be processed.`;
 				}
 
-				setScanResult({ success: true, message: checkoutMessage });
-			} else {
-				const { data: existingAttendanceId } = await supabase
-					.from("attendance")
-					.select("attendance_id")
-					.eq("event_id", eventId)
-					.eq("participant_id", participant.participant_id)
-					.maybeSingle();
+setScanResult({ success: true, message: checkoutMessage });
+				} else {
+					const { data: existingAttendanceId } = await supabase
+						.from("attendance")
+						.select("attendance_id, verification_method")
+						.eq("event_id", eventId)
+						.eq("participant_id", participant.participant_id)
+						.maybeSingle();
 
 				if (existingAttendanceId) {
 					setScanResult({ success: true, message: `${participant.name} is already checked in.` });
 				} else {
-					const geofenceOk = await verifyGeofence(participant.name);
-					if (!geofenceOk) return;
+					const requiresFaceThenRFID = Boolean(eventData?.with_FaceId && eventData?.with_RFID);
 
-					const { error: insertError } = await supabase.from("attendance").insert({
-						event_id: eventId,
-						participant_id: participant.participant_id,
-						check_in_time: new Date().toISOString(),
-						verified: false,
-						verification_method: "rfid",
-						source_rfid: trimmed,
-					});
+					if (requiresFaceThenRFID) {
+						if (!pendingFaceParticipant) {
+							setScanResult({ success: false, message: "No pending Face ID verification. Please verify face first." });
+							return;
+						}
 
-					if (insertError) {
-						setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
-						return;
+						if (pendingFaceParticipant.participantId !== participant.participant_id) {
+							setScanResult({ success: false, message: "RFID does not match the pending Face ID verification." });
+							return;
+						}
+
+						const geofenceOk = await verifyGeofence(pendingFaceParticipant.name);
+						if (!geofenceOk) return;
+
+						const { error: insertError } = await supabase.from("attendance").insert({
+							event_id: eventId,
+							participant_id: participant.participant_id,
+							check_in_time: new Date().toISOString(),
+							verified: true,
+							verification_method: "face+rfid",
+							source_rfid: trimmed,
+						});
+
+						if (insertError) {
+							setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
+							return;
+						}
+
+						setFullyCheckedInIds((prev) => new Set([...prev, participant.participant_id]));
+						setPendingFaceParticipant(null);
+						setScanResult({ success: true, message: `${participant.name} fully checked in (Face + RFID).` });
+					} else {
+						const geofenceOk = await verifyGeofence(participant.name);
+						if (!geofenceOk) return;
+
+						const { error: insertError } = await supabase.from("attendance").insert({
+							event_id: eventId,
+							participant_id: participant.participant_id,
+							check_in_time: new Date().toISOString(),
+							verified: true,
+							verification_method: "rfid",
+							source_rfid: trimmed,
+						});
+
+						if (insertError) {
+							setScanResult({ success: false, message: "Check-in failed: " + insertError.message });
+							return;
+						}
+
+						setFullyCheckedInIds((prev) => new Set([...prev, participant.participant_id]));
+						setScanResult({ success: true, message: `${participant.name} checked in.` });
 					}
-
-					setScanResult({ success: true, message: `${participant.name} marked Partially Checked In.` });
-				}
-			}
-
-			const { data: newAttendees } = await supabase
-				.from("attendance")
-				.select("*, participants(participant_id, name, email)")
-				.eq("event_id", eventId)
-				.order("check_in_time", { ascending: false });
-
-			if (newAttendees) setAttendees(newAttendees);
-
-			if (rfidInput.current) {
-				rfidInput.current.value = "";
-				rfidInput.current.focus();
-			}
-		} catch (error) {
-			console.error("RFID scan error:", error);
-			setScanResult({ success: false, message: "Unexpected error during scan." });
+}
 		}
-	};
+
+		const { data: newAttendees } = await supabase
+			.from("attendance")
+			.select("*, participants(participant_id, name, email)")
+			.eq("event_id", eventId)
+			.order("check_in_time", { ascending: false });
+
+		if (newAttendees) setAttendees(newAttendees);
+
+		if (rfidInput.current) {
+			rfidInput.current.value = "";
+			rfidInput.current.focus();
+		}
+	} catch (error) {
+		console.error("RFID scan error:", error);
+		setScanResult({ success: false, message: "Unexpected error during scan." });
+	}
+};
 
 	if (!isAuthorized) return null;
 	if (loading) return <div>Loading...</div>;
@@ -1193,7 +1211,7 @@ const [cameraReady, setCameraReady] = useState(false);
 															}}>
 																{scanStatus === "idle" ? "Ready" :
 																	scanStatus === "scanning" ? "Analyzing..." :
-																	scanStatus === "verified" ? "Face Matched" :
+																	scanStatus === "verified" ? (eventData?.with_FaceId && eventData?.with_RFID ? "Waiting for RFID" : "Face Matched") :
 																	scanStatus === "rejected" ? "Not Recognized" :
 																	""}
 															</span>
@@ -1220,7 +1238,11 @@ const [cameraReady, setCameraReady] = useState(false);
 														{scanStatus === "verified" && (
 															<div className="flex items-center gap-2">
 																<CheckCircle size={14} />
-																<span>✓ {scanResult.name} checked in</span>
+																{Boolean(eventData?.with_FaceId && eventData?.with_RFID) ? (
+																	<span>✓ {scanResult.name} verified - scan RFID to complete</span>
+																) : (
+																	<span>✓ {scanResult.name} checked in</span>
+																)}
 															</div>
 														)}
 														{scanStatus === "already_done" && (
@@ -1290,10 +1312,22 @@ const [cameraReady, setCameraReady] = useState(false);
 													<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
 														RFID Scanner
 													</h3>
-													<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
-														FALLBACK
-													</span>
+													{Boolean(eventData.with_FaceId && eventData.with_RFID) && (
+														<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
+															Face + RFID Mode
+														</span>
+													)}
+													{!eventData.with_FaceId && (
+														<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
+															Standalone
+														</span>
+													)}
 												</div>
+												{Boolean(eventData.with_FaceId && eventData.with_RFID) && pendingFaceParticipant && (
+													<div className="mb-3 p-2.5 rounded-lg text-xs" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
+														Pending Face Verification: <strong>{pendingFaceParticipant.name}</strong> - Ready for RFID scan
+													</div>
+												)}
 												{scanResult && (
 													<div
 														className="mb-3 p-2.5 rounded-lg flex items-center gap-2 text-xs"
@@ -1496,11 +1530,6 @@ const [cameraReady, setCameraReady] = useState(false);
 														background: "rgba(16, 185, 129, 0.15)",
 														color: "#10b981",
 														label: "Fully Checked In",
-													},
-													"Partially Checked In": {
-														background: "rgba(245, 158, 11, 0.15)",
-														color: "#f59e0b",
-														label: "Partially Checked In",
 													},
 													"Checked In": {
 														background: "rgba(16, 185, 129, 0.15)",

@@ -176,23 +176,29 @@ export default function PerformanceRegistrationsPage() {
 	};
 
 	const loadEvents = async () => {
-			const supabase = createClient();
+		try {
 			const orgLoginId = localStorage.getItem("loginId");
-
-			let eventsQuery = supabase
-				.from("events")
-				.select("event_id, event_name, event_date")
-				.order("event_date", { ascending: true });
+			const headers = new Headers();
+			headers.set("Content-Type", "application/json");
 			if (orgLoginId) {
-				eventsQuery = eventsQuery.eq("org_login_id", parseInt(orgLoginId, 10));
+				headers.set("x-org-login-id", orgLoginId);
 			}
-			const { data } = await eventsQuery;
 
-		if (data) {
+			const res = await fetch(`/api/admin/events?action=org-events`, { headers });
+			const json = await res.json();
+			const data = json.data || [];
+
+			if (!res.ok) {
+				console.error("[PerformanceRegistrations] API error:", json.error);
+				return;
+			}
+
 			setMyEvents(data);
 			if (data.length > 0 && !selectedEventId) {
 				setSelectedEventId(String(data[0].event_id));
 			}
+		} catch (error) {
+			console.error("[PerformanceRegistrations] loadEvents error:", error);
 		}
 	};
 

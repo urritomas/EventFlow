@@ -1,30 +1,23 @@
-// app/api/register-face/route.js
-// Forwards face registration requests to the FastAPI Python backend.
-
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { name, email, rfid, eventId, image } = body;
-    console.log("[register-face] eventId received:", eventId);
-    console.log("[register-face] formData event_id:", String(eventId));
+    const { name, email, rfid, image } = body;
 
     if (!image) return Response.json({ error: "No image data provided." }, { status: 400 });
     if (!name)  return Response.json({ error: "Name is required." },       { status: 400 });
     if (!email) return Response.json({ error: "Email is required." },      { status: 400 });
-    if (!rfid)  return Response.json({ error: "RFID is required." },       { status: 400 });
 
     const FACE_API_URL = process.env.FACE_API_URL ?? "http://localhost:8000";
 
-    // Convert base64 → binary
     const base64Data  = image.replace(/^data:image\/\w+;base64,/, "");
     const imageBuffer = Buffer.from(base64Data, "base64");
 
-    // Build multipart form for FastAPI
     const formData = new FormData();
     formData.append("name",  name);
     formData.append("email", email);
-    formData.append("rfid",  rfid);
-    formData.append("event_id", String(eventId));
+    if (rfid) {
+      formData.append("rfid", rfid);
+    }
     formData.append(
       "image",
       new Blob([imageBuffer], { type: "image/jpeg" }),

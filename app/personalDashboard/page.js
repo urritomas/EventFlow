@@ -356,8 +356,7 @@ export default function PersonalDashboard() {
 			}
 
 			setIsRegistered(true);
-			setShowRFIDStep(true);
-			setRegistrationMessage("✓ Event registration submitted! Now register your RFID card.");
+			setRegistrationMessage("✓ Event registration submitted! Your face ID and RFID (if set) will be used for check-in.");
 
 			const newRegisteredIds = new Set(userRegisteredEventIds);
 			newRegisteredIds.add(selectedEvent.event_id);
@@ -423,21 +422,21 @@ export default function PersonalDashboard() {
 		setRfidMessage("");
 
 		try {
-			const supabase = createClient();
-			const { error } = await supabase
-				.from("participants")
-				.update({rfid: newRFIDCode })
-				.eq("participant_id", participantId);
+			const response = await fetch("/api/participants/rfid", {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ participantId, rfid: newRFIDCode }),
+			});
+			const result = await response.json();
 
-			if (error) {
-				console.error("RFID save error:", error);
-				setRfidMessage("Error saving RFID: " + error.message);
-			} else {
-				setRegisteredRFID(newRFIDCode);
-				setNewRFIDCode("");
-				setRfidMessage("✓ RFID card registered successfully!");
-				setTimeout(() => setRfidMessage(""), 3000);
+			if (!response.ok || !result.ok) {
+				throw new Error(result.error || result.details || "Failed to save RFID");
 			}
+
+			setRegisteredRFID(newRFIDCode);
+			setNewRFIDCode("");
+			setRfidMessage("✓ RFID card registered successfully!");
+			setTimeout(() => setRfidMessage(""), 3000);
 		} catch (error) {
 			console.error("RFID registration error:", error);
 			setRfidMessage("Error: " + error.message);
@@ -453,23 +452,25 @@ export default function PersonalDashboard() {
 		setRfidMessage("");
 
 		try {
-			const supabase = createClient();
-			const { error } = await supabase
-				.from("participants")
-				.update({ rfid: null })
-				.eq("participant_id", participantId);
+			const response = await fetch("/api/participants/rfid", {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ participantId }),
+			});
+			const result = await response.json();
 
-			if (error) {
-				console.error("RFID remove error:", error);
-				setRfidMessage("Error removing RFID: " + error.message);
-			} else {
-				setRegisteredRFID(null);
-				setNewRFIDCode("");
-				setRfidMessage("✓ RFID card removed successfully!");
-				setTimeout(() => setRfidMessage(""), 3000);
+			if (!response.ok || !result.ok) {
+				const details = result?.details || result?.error || `HTTP ${response.status}`;
+				console.error("[RFID] Remove failed:", details);
+				throw new Error(details);
 			}
+
+			setRegisteredRFID(null);
+			setNewRFIDCode("");
+			setRfidMessage("✓ RFID card removed successfully!");
+			setTimeout(() => setRfidMessage(""), 3000);
 		} catch (error) {
-			console.error("RFID remove error:", error);
+			console.error("[RFID] Remove error:", error);
 			setRfidMessage("Error: " + error.message);
 		} finally {
 			setIsSettingRFID(false);
@@ -1163,6 +1164,7 @@ export default function PersonalDashboard() {
 									</>
 								);
 							})()}
+						</section>
 
 						{/* Event Details Modal */}
 						{selectedEvent && (
@@ -1210,8 +1212,8 @@ export default function PersonalDashboard() {
 									{/* Body */}
 									<div className="p-6 space-y-4">
 										{/* Event Details */}
-										{!showRFIDStep ? (
-											<>
+										{!showRFIDStep && (
+											<div className="space-y-4">
 												<div className="space-y-3 pb-6 border-b" style={{ borderColor: "var(--border-subtle)" }}>
 													<div className="flex items-center gap-3">
 														<MapPin size={16} style={{ color: "#10b981" }} />
@@ -1283,33 +1285,33 @@ export default function PersonalDashboard() {
 													</div>
 												)}
 
-											{/* Registration Status */}
-											<div
-												className="rounded-lg p-3 border"
-												style={{
-													backgroundColor: isRegistered ? "rgba(16, 185, 129, 0.1)" : "rgba(59, 130, 246, 0.1)",
-													borderColor: isRegistered ? "#10b981" : "#3b82f6",
-												}}
-											>
-												<p className="text-sm font-semibold" style={{ color: isRegistered ? "#10b981" : "#3b82f6" }}>
-													{isRegistered ? "✓ Registered for this event" : "Not registered for this event"}
-												</p>
-												{isRegistered && registrationReviewStatus === "pending" && (
-													<p className="text-xs mt-1" style={{ color: "#eab308" }}>
-														Status: Pending organization review
+												{/* Registration Status */}
+												<div
+													className="rounded-lg p-3 border"
+													style={{
+														backgroundColor: isRegistered ? "rgba(16, 185, 129, 0.1)" : "rgba(59, 130, 246, 0.1)",
+														borderColor: isRegistered ? "#10b981" : "#3b82f6",
+													}}
+												>
+													<p className="text-sm font-semibold" style={{ color: isRegistered ? "#10b981" : "#3b82f6" }}>
+														{isRegistered ? "✓ Registered for this event" : "Not registered for this event"}
 													</p>
-												)}
-												{isRegistered && registrationReviewStatus === "accepted" && (
-													<p className="text-xs mt-1" style={{ color: "#10b981" }}>
-														Status: Accepted by organizer
-													</p>
-												)}
-												{isRegistered && registrationReviewStatus === "declined" && (
-													<p className="text-xs mt-1" style={{ color: "#ef4444" }}>
-														Status: Declined by organizer
-													</p>
-												)}
-											</div>
+													{isRegistered && registrationReviewStatus === "pending" && (
+														<p className="text-xs mt-1" style={{ color: "#eab308" }}>
+															Status: Pending organization review
+														</p>
+													)}
+													{isRegistered && registrationReviewStatus === "accepted" && (
+														<p className="text-xs mt-1" style={{ color: "#10b981" }}>
+															Status: Accepted by organizer
+														</p>
+													)}
+													{isRegistered && registrationReviewStatus === "declined" && (
+														<p className="text-xs mt-1" style={{ color: "#ef4444" }}>
+															Status: Declined by organizer
+														</p>
+													)}
+												</div>
 
 												{/* Action Buttons */}
 												<div className="flex gap-3 pt-4">
@@ -1349,84 +1351,12 @@ export default function PersonalDashboard() {
 														Close
 													</button>
 												</div>
-											</>
-										) : (
-											/* RFID Registration Step */
-											<div className="space-y-4">
-												<div className="rounded-lg p-4 text-center" style={{ backgroundColor: "rgba(16, 185, 129, 0.1)" }}>
-													<Smartphone size={32} style={{ color: "#10b981", margin: "0 auto" }} />
-													<p className="mt-3 font-semibold text-sm" style={{ color: "var(--foreground)" }}>
-														RFID Card Registration
-													</p>
-													<p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-														Tap or enter your RFID card code
-													</p>
-												</div>
-
-												<div>
-													<label className="mb-2 block text-xs font-semibold uppercase" style={{ color: "var(--foreground)" }}>
-														RFID Code
-													</label>
-													<input
-														type="text"
-														value={rfidCode}
-														onChange={(e) => setRfidCode(e.target.value)}
-														placeholder="Enter RFID code or tap card"
-														autoFocus
-														className="w-full rounded-lg border px-3 py-2 text-sm"
-														style={{
-															backgroundColor: "var(--page-bg)",
-															borderColor: "var(--border-subtle)",
-															color: "var(--foreground)",
-														}}
-													/>
-												</div>
-
-												{registrationMessage && (
-													<div
-														className="rounded-lg p-3 text-sm"
-														style={{
-															backgroundColor: registrationMessage.includes("Error")
-																? "rgba(239, 68, 68, 0.1)"
-																: "rgba(16, 185, 129, 0.1)",
-															color: registrationMessage.includes("Error") ? "#ef4444" : "#10b981",
-															borderLeft: `4px solid ${registrationMessage.includes("Error") ? "#ef4444" : "#10b981"}`,
-														}}
-													>
-														{registrationMessage}
-													</div>
-												)}
-
-												<div className="flex gap-3 pt-4">
-													<button
-														onClick={handleRFIDSubmit}
-														disabled={isRegistering}
-														className="flex-1 rounded-lg px-4 py-2 font-semibold text-sm transition disabled:opacity-50"
-														style={{
-															backgroundColor: "#3b82f6",
-															color: "white",
-														}}
-													>
-														{isRegistering ? "Saving..." : "Submit RFID"}
-													</button>
-													<button
-														onClick={() => setShowRFIDStep(false)}
-														className="flex-1 rounded-lg px-4 py-2 font-semibold text-sm transition"
-														style={{
-															backgroundColor: "rgba(107, 114, 128, 0.1)",
-															color: "var(--foreground)",
-														}}
-													>
-														Back
-													</button>
-												</div>
 											</div>
 										)}
 									</div>
 								</div>
 							</div>
 						)}
-						</section>
 
 						{/* Attendance Setup */}
 						<section id="attendance" className="space-y-4">
@@ -1451,19 +1381,13 @@ export default function PersonalDashboard() {
 										Register your face for secure event check-in
 									</p>
 									<button
-  										onClick={() => {
-    										// If user has registered events, use the first upcoming one
-    										// Or pass all registered event IDs
-    										const registeredIds = [...userRegisteredEventIds];
-    										const query = registeredIds.length > 0 
-      											? `?eventId=${registeredIds[0]}` 
-      											: "";
-    										router.push(`/personalDashboard/register-face${query}`);
-  										}}
-  										className="mt-4 w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
-  										style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}
+										onClick={() => {
+											router.push(`/personalDashboard/register-face`);
+										}}
+										className="mt-4 w-full rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
+										style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}
 									>
-  										Register Face ID
+										Register Face ID
 									</button>
 									<p className="mt-3 text-xs font-semibold flex items-center gap-1.5" style={{ color: "#10b981" }}>
 										<CheckCircle size={13} /> Registered
@@ -1521,11 +1445,11 @@ export default function PersonalDashboard() {
 													type="text"
 													value={newRFIDCode}
 													onChange={(e) => setNewRFIDCode(e.target.value)}
-													onKeyPress={(e) => {
-														if (e.key === "Enter") {
-															handleSetRFIDCard();
-														}
-													}}
+												onKeyDown={(e) => {
+													if (e.key === "Enter") {
+														handleSetRFIDCard();
+													}
+												}}
 													placeholder="Enter RFID code or tap card"
 													autoFocus
 													className="w-full rounded-lg border px-3 py-2 text-sm"

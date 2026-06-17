@@ -1,11 +1,10 @@
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { rfid, eventId, image } = body;  // ← add eventId
+    const { rfid, image } = body;
 
     if (!image)   return Response.json({ error: "No image data provided." }, { status: 400 });
-    if (!rfid)    return Response.json({ error: "RFID is required." },       { status: 400 });
-    if (!eventId) return Response.json({ error: "Event ID is required." },   { status: 400 });
+    if (!rfid)    return Response.json({ error: "RFID is required to locate your account." }, { status: 400 });
 
     const FACE_API_URL = process.env.FACE_API_URL ?? "http://localhost:8000";
 
@@ -13,8 +12,7 @@ export async function POST(request) {
     const imageBuffer = Buffer.from(base64Data, "base64");
 
     const formData = new FormData();
-    formData.append("rfid",     rfid);
-    formData.append("event_id", String(eventId));
+    formData.append("rfid", rfid);
     formData.append(
       "image",
       new Blob([imageBuffer], { type: "image/jpeg" }),

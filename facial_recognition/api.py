@@ -76,30 +76,21 @@ def fetch_active_event() -> Optional[dict]:
 
 def reload_gallery() -> None:
     """
-    Reloads the active event from Supabase, then loads all face embeddings
-    for that event into the in-memory gallery.
-
-    If no event is active, the gallery is cleared and verification is blocked.
+    Loads all active global face embeddings (event_id IS NULL) into the
+    in-memory gallery, making face recognition reusable across any event.
     """
     global gallery, active_event
 
     active_event = fetch_active_event()
 
-    if active_event is None:
-        gallery = []
-        logger.warning("No active event found. Set is_active=true on an event in Supabase.")
-        return
-
-    event_id = active_event["event_id"]
-
     res = (
         supabase.table("face_embeddings")
         .select(
-            "embedding_id, participant_id, embedding, event_id, "
+            "embedding_id, participant_id, embedding, "
             "participants(participant_id, name, rfid)"
         )
         .eq("is_active", True)
-        .eq("event_id", event_id)
+        .is_("event_id", None)
         .execute()
     )
 
@@ -119,8 +110,9 @@ def reload_gallery() -> None:
         })
 
     logger.info(
-        "Gallery reloaded | event='%s' (id=%d) | %d participant(s).",
-        active_event["event_name"], event_id, len(gallery),
+        "Gallery reloaded (global embeddings) | %d participant(s) | active_event=%s",
+        len(gallery),
+        active_event["event_name"] if active_event else "none",
     )
 
 
@@ -266,22 +258,10 @@ def trigger_reload():
 async def register_participant(
     name:       str        = Form(...),
     email:      str        = Form(...),
-    rfid:       str        = Form(...),
+    rfid:       Optional[str] = Form(None),
     image:      UploadFile = File(...),
-    event_id:   int        = Form(...),   # ← received from frontend
+    event_id:   Optional[int] = Form(None),
 ):
-    # Fetch the specific event by ID from the frontend
-    event_res = (
-        supabase.table("events")
-        .select("event_id, event_name")
-        .eq("event_id", event_id)
-        .single()
-        .execute()
-    )
-    if not event_res.data:
-        raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
-    event = event_res.data
-
     # Extract embedding
     frame     = decode_image(await image.read())
     embedding = engine.detect_and_embed(frame)
@@ -292,30 +272,36 @@ async def register_participant(
             detail="No face detected. Ensure the participant is clearly visible and well-lit."
         )
 
-    # Get or create participant
+    # Get or create participant by email (fallback to rfid if provided)
     existing = (
         supabase.table("participants")
-        .select("participant_id, name")
-        .eq("rfid", rfid)
+        .select("participant_id, name, rfid")
+        .eq("email", email)
         .execute()
     )
 
     if existing.data:
         participant = existing.data[0]
+        if rfid and not participant.get("rfid"):
+            supabase.table("participants").update({"rfid": rfid}).eq("participant_id", participant["participant_id"]).execute()
+            participant["rfid"] = rfid
     else:
+        insert_data = {"name": name, "email": email}
+        if rfid:
+            insert_data["rfid"] = rfid
         p_res = (
             supabase.table("participants")
-            .insert({"name": name, "email": email, "rfid": rfid})
+            .insert(insert_data)
             .execute()
         )
         participant = p_res.data[0]
 
-    # Check if already registered for this event
+    # Check if already has a global face embedding (event_id IS NULL)
     already = (
         supabase.table("face_embeddings")
         .select("embedding_id")
         .eq("participant_id", participant["participant_id"])
-        .eq("event_id", event_id)
+        .is_("event_id", None)
         .eq("is_active", True)
         .execute()
     )
@@ -324,15 +310,13 @@ async def register_participant(
         raise HTTPException(
             status_code=409,
             detail=(
-                f"'{participant['name']}' is already registered for "
-                f"'{event['event_name']}'. Use /api/re-enroll to update."
+                f"'{participant['name']}' already has a global face registration. Use /api/re-enroll to update."
             )
         )
 
-    # Insert embedding for this event
+    # Insert global embedding (no event_id)
     supabase.table("face_embeddings").insert({
         "participant_id": participant["participant_id"],
-        "event_id":       event_id,
         "embedding":      embedding.tolist(),
         "is_active":      True,
     }).execute()
@@ -340,16 +324,14 @@ async def register_participant(
     reload_gallery()
 
     logger.info(
-        "Registered: %s (rfid=%s) for event='%s' (id=%d)",
-        participant["name"], rfid, event["event_name"], event_id,
+        "Registered face globally: %s (rfid=%s)",
+        participant["name"], rfid or participant.get("rfid"),
     )
 
     return {
         "success":        True,
-        "message":        f"{participant['name']} registered for '{event['event_name']}'.",
+        "message":        f"{participant['name']}'s face registered globally.",
         "participant_id": participant["participant_id"],
-        "event_id":       event_id,
-        "event_name":     event["event_name"],
     }
 
 
@@ -357,20 +339,7 @@ async def register_participant(
 async def re_enroll_participant(
     rfid:       str        = Form(...),
     image:      UploadFile = File(...),
-    event_id:   int        = Form(...),
 ):
-    # Fetch the specific event by ID — NOT require_active_event()
-    event_res = (
-        supabase.table("events")
-        .select("event_id, event_name")
-        .eq("event_id", event_id)
-        .single()
-        .execute()
-    )
-    if not event_res.data:
-        raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
-    event = event_res.data
-
     p_res = (
         supabase.table("participants")
         .select("participant_id, name")
@@ -390,11 +359,10 @@ async def re_enroll_participant(
 
     supabase.table("face_embeddings").delete().eq(
         "participant_id", participant["participant_id"]
-    ).eq("event_id", event_id).execute()
+    ).is_("event_id", None).execute()
 
     supabase.table("face_embeddings").insert({
         "participant_id": participant["participant_id"],
-        "event_id":       event_id,
         "embedding":      embedding.tolist(),
         "is_active":      True,
     }).execute()
@@ -403,8 +371,7 @@ async def re_enroll_participant(
 
     return {
         "success":    True,
-        "message":    f"Face updated for '{participant['name']}' ({event['event_name']}).",
-        "event_name": event["event_name"],
+        "message":    f"Face updated for '{participant['name']}' (global registration).",
     }
 
 
