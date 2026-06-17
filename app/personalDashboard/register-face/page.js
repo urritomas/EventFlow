@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import SiteHeader from "../../components/SiteHeader";
-import { Camera, CheckCircle, ArrowLeft, AlertCircle } from "lucide-react";
+import { Camera, CheckCircle, ArrowLeft, AlertCircle, User } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 
 export default function RegisterFacePage() {
   const router = useRouter();
@@ -50,10 +51,32 @@ export default function RegisterFacePage() {
     const firstName = localStorage.getItem("firstName") || "";
     const lastName = localStorage.getItem("lastName") || "";
     const email = localStorage.getItem("email") || "";
-    const rfid = localStorage.getItem("rfid") || "";
+    const storedRFID = localStorage.getItem("rfid") || "";
+
     setUserName(`${firstName} ${lastName}`.trim());
     setUserEmail(email);
-    setUserRFID(rfid);
+    setUserRFID(storedRFID);
+
+    if (!email.trim()) return;
+
+    const loadRFID = async () => {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("participants")
+          .select("rfid")
+          .eq("email", email.trim())
+          .limit(1);
+
+        const rfid = data?.[0]?.rfid ? String(data[0].rfid).trim() : "";
+        setUserRFID(rfid);
+        if (rfid) localStorage.setItem("rfid", rfid);
+      } catch (error) {
+        console.warn("[register-face] Unable to load RFID:", error);
+      }
+    };
+
+    loadRFID();
   }, []);
 
   const captureFrame = () => {
@@ -93,15 +116,41 @@ export default function RegisterFacePage() {
 
       if (!response.ok) {
         const errMsg = data.error || data.detail || "Failed to register face.";
-        const alreadyMatch = errMsg.toLowerCase().includes("already registered");
-        
+        const alreadyMatch = errMsg.toLowerCase().includes("already");
+
         if (alreadyMatch) {
+          // Face already exists — automatically re-enroll instead
           setAlreadyRegistered(true);
-          setStatusMessage("");
-          setIsSubmitting(false);
+          setStatusMessage("Face already registered. Updating your registration…");
+
+          if (!userRFID.trim()) {
+            setErrorMessage("RFID not found. Please set your RFID in the dashboard first.");
+            setIsSubmitting(false);
+            return;
+          }
+
+          // Inline re-enroll call so state inconsistencies don't break the flow
+          const reEnrollResponse = await fetch("/api/re-enroll-face", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              rfid: userRFID.trim(),
+              image: capturedImage,
+            }),
+          });
+
+          const reEnrollData = await reEnrollResponse.json();
+
+          if (!reEnrollResponse.ok) {
+            throw new Error(reEnrollData.error || reEnrollData.detail || "Failed to re-enroll face.");
+          }
+
+          setStatusMessage(`✓ ${reEnrollData.message || "Face updated successfully!"} Redirecting…`);
+          streamRef.current?.getTracks().forEach((t) => t.stop());
+          setTimeout(() => router.push("/personalDashboard"), 2000);
           return;
         }
-        
+
         throw new Error(errMsg);
       }
 
@@ -257,9 +306,6 @@ export default function RegisterFacePage() {
               <AlertCircle size={20} className="text-red-400 shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-sm text-red-300">{errorMessage}</p>
-                {errorMessage.toLowerCase().includes("already") && !alreadyRegistered && (
-                  <p className="text-xs text-red-400 mt-2">You can update your face registration instead.</p>
-                )}
               </div>
             </div>
           )}
