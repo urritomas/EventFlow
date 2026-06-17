@@ -56,7 +56,7 @@ async function calculateMetrics(participantId: string | number): Promise<Behavio
 			console.log("Attendance table not accessible, using registration data only");
 		}
 
-		const registeredEvents = registrationData || [];
+const registeredEvents = registrationData || [];
 		const attendedEvents = attendanceData.filter(a => a.verified);
 
 		const totalEventsRegistered = registeredEvents.length;
@@ -66,21 +66,23 @@ async function calculateMetrics(participantId: string | number): Promise<Behavio
 				? Math.round((totalEventsAttended / totalEventsRegistered) * 100)
 				: 0;
 
-		const lateCheckIns = attendanceData.filter(record => {
-			if (!record.verified_at || !record.check_in_time) return false;
-			const verifiedTime = new Date(record.verified_at).getTime();
-			const checkInTime = new Date(record.check_in_time).getTime();
-			return verifiedTime - checkInTime > 15 * 60 * 1000; // 15 minutes
-		}).length;
+			// Calculate late arrivals by comparing check-in time vs event start time
+			const lateCheckIns = attendanceData.filter((record) => {
+				if (!record.check_in_time) return false;
+				// Use pre-calculated is_late if available, otherwise check late_minutes
+				if (record.is_late === true) return true;
+				if (record.late_minutes && record.late_minutes > 15) return true;
+				return false;
+			}).length;
 
 		const absences = totalEventsRegistered - totalEventsAttended;
 
 		// Calculate consecutive missed events
 		let consecutiveMissedEvents = 0;
-		if (totalEventsRegistered > 0) {
+		if (totalEventsRegistered > 0 && registeredEvents.length > 0) {
 			let currentConsecutive = 0;
-			for (let i = 0; i < totalEventsRegistered; i++) {
-				const isAttended = attendedEvents.length > 0;
+			for (const reg of registeredEvents) {
+				const isAttended = attendedEvents.some(a => a.event_id === reg.event_id);
 				if (!isAttended) {
 					currentConsecutive++;
 					consecutiveMissedEvents = Math.max(consecutiveMissedEvents, currentConsecutive);

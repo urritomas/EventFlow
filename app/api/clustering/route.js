@@ -24,6 +24,16 @@ export async function GET(request) {
       participantsQuery = participantsQuery.eq("participant_id", participantIdParam);
     }
 
+    // Fetch event start times for punctuality calculation
+    const { data: eventsData } = await supabase
+      .from("events")
+      .select("event_id, start_time");
+
+    const eventStartTimes = {};
+    (eventsData || []).forEach((event) => {
+      eventStartTimes[event.event_id] = event.start_time;
+    });
+
     const [participantsRes, attendanceRes] = await Promise.all([
       participantsQuery,
       participantIdParam
@@ -43,7 +53,7 @@ export async function GET(request) {
       });
     }
 
-    const clusterResult = runClustering(participants, attendance);
+    const clusterResult = runClustering(participants, attendance, eventStartTimes);
 
     let clusterAssignment = null;
     if (participantIdParam) {
@@ -76,7 +86,7 @@ export async function GET(request) {
   }
 }
 
-function runClustering(participants, attendanceRecords) {
+function runClustering(participants, attendanceRecords, eventStartTimes = {}) {
   const featureWeights = {
     attendance_rate: 0.35,
     avg_similarity: 0.25,
@@ -99,6 +109,29 @@ function runClustering(participants, attendanceRecords) {
     participantEvents.get(pid).add(record.event_id);
   }
 
+  // Helper function to calculate late arrivals based on event start times
+  const calculateLateCount = (logs) => {
+    let lateCount = 0;
+    for (const log of logs) {
+      if (!log.check_in_time) continue;
+      const eventStart = eventStartTimes[log.event_id];
+      if (!eventStart) continue;
+      try {
+        const checkInTime = new Date(log.check_in_time);
+        const timeParts = String(eventStart).split(":");
+        const hours = parseInt(timeParts[0], 10) || 0;
+        const minutes = parseInt(timeParts[1], 10) || 0;
+        const eventStartDt = new Date(checkInTime);
+        eventStartDt.setHours(hours, minutes, 0, 0);
+        const diffMinutes = (checkInTime - eventStartDt) / (1000 * 60);
+        if (diffMinutes > 15) lateCount++;
+      } catch (e) {
+        // Skip invalid dates
+      }
+    }
+    return lateCount;
+  };
+
   const features = new Map();
   for (const p of participants) {
     const pid = p.participant_id;
@@ -106,9 +139,19 @@ function runClustering(participants, attendanceRecords) {
     const totalEvents = logs.length;
     const verifiedCount = logs.filter((log) => Boolean(log.verified)).length;
     const attendanceRate = totalEvents > 0 ? verifiedCount / totalEvents : 0;
-    const avgSimilarity = 0.5;
-    const lateCount = 0;
+
+    // Calculate late arrivals from actual check-in times vs event start
+    const lateCount = calculateLateCount(logs);
     const punctualityScore = totalEvents > 0 ? Math.max(0, 1 - lateCount / totalEvents) : 0.5;
+
+    // Calculate avg_similarity from stored similarity values in attendance
+    const similarities = logs
+      .map((log) => log.check_in_similarity || log.similarity || log.avg_similarity || 0)
+      .filter((s) => s > 0);
+    const avgSimilarity = similarities.length > 0
+      ? similarities.reduce((a, b) => a + b, 0) / similarities.length
+      : 0.5;
+
     const eventDiversity = Math.min((participantEvents.get(pid)?.size || 0) / 10, 1);
     const checkIns = logs.filter((log) => log.check_in_time).length;
     const checkOuts = logs.filter((log) => log.check_out_time).length;

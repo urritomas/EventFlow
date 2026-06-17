@@ -58,6 +58,34 @@ export async function POST(req) {
     const now = new Date().toISOString();
     const verificationMethod = method || 'manual';
 
+    // Fetch event start time to calculate lateness
+    const { data: eventData } = await supabase
+      .from('events')
+      .select('event_id, start_time, event_date')
+      .eq('event_id', eventId)
+      .maybeSingle();
+
+    const checkLateStatus = (checkInTime, eventStart) => {
+      if (!eventStart) return { is_late: null, late_minutes: null };
+      try {
+        const checkIn = new Date(checkInTime);
+        const timeParts = String(eventStart).split(':');
+        const hours = parseInt(timeParts[0], 10) || 0;
+        const minutes = parseInt(timeParts[1], 10) || 0;
+        const eventStartDt = new Date(checkIn);
+        eventStartDt.setHours(hours, minutes, 0, 0);
+        const diffMinutes = (checkIn - eventStartDt) / (1000 * 60);
+        return {
+          is_late: diffMinutes > 15,
+          late_minutes: diffMinutes > 15 ? Math.round(diffMinutes * 100) / 100 : 0
+        };
+      } catch {
+        return { is_late: null, late_minutes: null };
+      }
+    };
+
+    const lateStatus = checkLateStatus(now, eventData?.start_time);
+
     const { data: existing, error: existingError } = await supabase
       .from('attendance')
       .select('attendance_id, check_in_time, verification_method')
@@ -113,8 +141,10 @@ export async function POST(req) {
           check_in_time: now,
           verified: true,
           verification_method: verificationMethod,
+          is_late: lateStatus.is_late,
+          late_minutes: lateStatus.late_minutes,
         })
-        .select('attendance_id, check_in_time, verification_method');
+        .select('attendance_id, check_in_time, verification_method, is_late, late_minutes');
 
       inserted = result.data;
       insertError = result.error;
