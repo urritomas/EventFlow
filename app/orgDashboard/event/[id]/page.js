@@ -1235,23 +1235,29 @@ const [cameraReady, setCameraReady] = useState(false);
 									)}
 								</div>
 
-								<p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
-									{mode === "checkout"
-										? eventData.with_FaceId
-											? "Use Face ID to check participants out. RFID remains available as a quick fallback."
-											: "Scan the participant's RFID card to check them out."
-										: "Face recognition runs automatically. Use RFID as quick fallback."}
-								</p>
+							<p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
+  {mode === "checkout"
+    ? eventData.with_FaceId && eventData.with_RFID
+      ? "Use Face ID to check participants out. RFID available as fallback."
+      : eventData.with_FaceId
+        ? "Face recognition will check participants out automatically."
+        : "Scan the participant's RFID card to check them out."
+    : eventData.with_FaceId && eventData.with_RFID
+      ? "Face recognition runs automatically. Scan RFID to complete check-in."
+      : eventData.with_FaceId
+        ? "Face recognition runs automatically. Stand in front of the camera."
+        : "Scan the participant's RFID card to check in."}
+</p>
 
 								{mode === "checkout" ? (
-									<div className="grid gap-4 md:grid-cols-2">
-										{eventData.with_FaceId && (
-											<div
-												className="rounded-xl border p-4"
-												style={{ borderColor: "rgba(59, 130, 246, 0.3)" }}
-											>
-												<div className="flex items-center gap-2 mb-3">
-													<Camera size={18} style={{ color: "#3b82f6" }} />
+									<div className={`grid gap-4 ${eventData.with_FaceId && eventData.with_RFID ? 'md:grid-cols-2' : 'grid-cols-1 max-w-2xl mx-auto'}`}>
+  {eventData.with_FaceId && (
+    <div
+      className="rounded-xl border p-4"
+      style={{ borderColor: "rgba(59, 130, 246, 0.3)" }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Camera size={18} style={{ color: "#3b82f6" }} />
 													<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
 														Face Check Out
 													</h3>
@@ -1427,9 +1433,9 @@ const [cameraReady, setCameraReady] = useState(false);
 										)}
 									</div>
 								) : (
-									<div className="grid gap-4 md:grid-cols-2">
-										{/* Face Recognition Panel */}
-										{eventData.with_FaceId && (
+									<div className={`grid gap-4 ${eventData.with_FaceId && eventData.with_RFID ? 'md:grid-cols-2' : 'grid-cols-1 max-w-2xl mx-auto'}`}>
+  {/* Face Recognition Panel */}
+  {eventData.with_FaceId && (
 											<div
 												className="rounded-xl border p-4"
 												style={{ borderColor: "rgba(59, 130, 246, 0.3)" }}
