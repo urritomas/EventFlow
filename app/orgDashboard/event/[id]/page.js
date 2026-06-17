@@ -130,7 +130,10 @@ export default function EventDetailsPage() {
 	const mode = searchParams?.get("mode") || "check-in"; // check-in or checkout
 
 	const [sidebarOpen, setSidebarOpen] = useState(false);
-	const [isAuthorized, setIsAuthorized] = useState(false);
+	const [isAuthorized, setIsAuthorized] = useState(() => {
+		if (typeof window === "undefined") return false;
+		return localStorage.getItem("isLoggedIn") === "true" && localStorage.getItem("userRole") === "organization";
+	});
 	const [eventData, setEventData] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [activeTab, setActiveTab] = useState("unified-scanner");
@@ -178,6 +181,56 @@ const [cameraReady, setCameraReady] = useState(false);
 		return data?.[0] ?? null;
 	};
 
+	const refreshAttendance = async (supabase) => {
+		const { data: newAttendees } = await supabase
+			.from("attendance")
+			.select("*, participants(participant_id, name, email)")
+			.eq("event_id", eventId)
+			.order("check_in_time", { ascending: false });
+
+		if (newAttendees) {
+			setAttendees(newAttendees);
+			syncCheckedInStateFromAttendees(newAttendees);
+		}
+	};
+
+	const handleFaceCheckout = async ({ supabase, participantId, name, similarity }) => {
+		const openAttendance = await getOpenAttendance(supabase, participantId);
+
+		if (!openAttendance) {
+			setScanStatus("already_done");
+			setScanResult({ success: true, name, message: `${name} has no active check-in to close.` });
+			return;
+		}
+
+		const geofenceOk = await verifyGeofence(name);
+		if (!geofenceOk) {
+			setScanStatus("idle");
+			return;
+		}
+
+		const { error: updateError } = await supabase
+			.from("attendance")
+			.update({
+				check_out_time: new Date().toISOString(),
+				check_out_verified: true,
+				check_out_method: "face",
+				check_out_similarity: Number.isFinite(similarity) ? similarity : null,
+			})
+			.eq("attendance_id", openAttendance.attendance_id);
+
+		if (updateError) {
+			setScanStatus("idle");
+			setScanResult({ success: false, message: "Check-out failed: " + updateError.message });
+			return;
+		}
+
+		await refreshAttendance(supabase);
+		setPendingFaceParticipant(null);
+		setScanStatus("verified");
+		setScanResult({ success: true, name, message: `${name} checked out.` });
+	};
+
 	const syncCheckedInStateFromAttendees = (attendanceRows) => {
 		const openCheckInIds = (attendanceRows || [])
 			.filter((row) => row.check_in_time && !row.check_out_time)
@@ -189,14 +242,10 @@ const [cameraReady, setCameraReady] = useState(false);
 	};
 
 	useEffect(() => {
-		const isLoggedIn = localStorage.getItem("isLoggedIn");
-		const userRole = localStorage.getItem("userRole");
-		if (!isLoggedIn || userRole !== "organization") {
+		if (!isAuthorized) {
 			router.push("/login");
-		} else {
-			setIsAuthorized(true);
 		}
-	}, [router]);
+	}, [isAuthorized, router]);
 
 	useEffect(() => {
 		if (!isAuthorized || !eventId) return;
@@ -364,21 +413,16 @@ const [cameraReady, setCameraReady] = useState(false);
 		}
 	};
 
-	// Auto-start camera when unified-scanner tab opens
-	useEffect(() => {
-		if (!isAuthorized || !eventId) return;
-		const scannerEnabled = Boolean(eventData?.with_FaceId || eventData?.with_RFID);
-		const geofenceEnabled = Boolean(eventData?.with_Geo);
-		const allowed = new Set([
-			"overview",
-			"registered",
-			"attendance",
-			"analytics",
-			...(scannerEnabled ? ["unified-scanner"] : []),
-			...(geofenceEnabled ? ["geofence"] : []),
-		]);
-		if (!allowed.has(activeTab)) setActiveTab("overview");
-	}, [isAuthorized, eventId, eventData?.with_FaceId, eventData?.with_RFID, eventData?.with_Geo, activeTab]);
+	const scannerEnabled = Boolean(eventData?.with_FaceId || eventData?.with_RFID);
+	const geofenceEnabled = Boolean(eventData?.with_Geo);
+	const effectiveActiveTab = new Set([
+		"overview",
+		"registered",
+		"attendance",
+		"analytics",
+		...(scannerEnabled ? ["unified-scanner"] : []),
+		...(geofenceEnabled ? ["geofence"] : []),
+	]).has(activeTab) ? activeTab : "overview";
 
 	useEffect(() => {
 		if (activeTab !== "unified-scanner" || !eventData?.with_FaceId) return;
@@ -447,6 +491,17 @@ const [cameraReady, setCameraReady] = useState(false);
 			if (data.verified) {
 				const participantId = data.participant_id || data.student_id;
 				const requiresBoth = Boolean(eventData?.with_FaceId && eventData?.with_RFID);
+				const supabase = createClient();
+
+				if (mode === "checkout") {
+					await handleFaceCheckout({
+						supabase,
+						participantId,
+						name: data.name,
+						similarity: data.similarity,
+					});
+					return;
+				}
 
 				if (checkedInRef.current.has(participantId)) {
 					setScanStatus("already_done");
@@ -454,7 +509,6 @@ const [cameraReady, setCameraReady] = useState(false);
 					return;
 				}
 
-				const supabase = createClient();
 				const openAttendance = await getOpenAttendance(supabase, participantId);
 				if (openAttendance) {
 					checkedInRef.current = new Set([...checkedInRef.current, participantId]);
@@ -495,16 +549,7 @@ const [cameraReady, setCameraReady] = useState(false);
 						return;
 					}
 
-					const { data: newAttendees } = await supabase
-						.from("attendance")
-						.select("*, participants(participant_id, name, email)")
-						.eq("event_id", eventId)
-						.order("check_in_time", { ascending: false });
-
-					if (newAttendees) {
-						setAttendees(newAttendees);
-						syncCheckedInStateFromAttendees(newAttendees);
-					}
+					await refreshAttendance(supabase);
 
 					checkedInRef.current = new Set([...checkedInRef.current, participantId]);
 					setFullyCheckedInIds((prev) => new Set([...prev, participantId]));
@@ -957,11 +1002,11 @@ const [cameraReady, setCameraReady] = useState(false);
 									key={tab.id}
 									onClick={() => setActiveTab(tab.id)}
 									className={`px-4 py-3 font-medium text-sm transition flex items-center gap-2 ${
-										activeTab === tab.id ? "border-b-2" : ""
+										effectiveActiveTab === tab.id ? "border-b-2" : ""
 									}`}
 									style={{
-										color: activeTab === tab.id ? "#3b82f6" : "var(--text-muted)",
-										borderBottomColor: activeTab === tab.id ? "#3b82f6" : "transparent",
+										color: effectiveActiveTab === tab.id ? "#3b82f6" : "var(--text-muted)",
+										borderBottomColor: effectiveActiveTab === tab.id ? "#3b82f6" : "transparent",
 									}}
 								>
 									<tab.icon size={16} />
@@ -993,7 +1038,7 @@ const [cameraReady, setCameraReady] = useState(false);
 						})()}
 					</div>
 
-					{activeTab === "overview" && (
+					{effectiveActiveTab === "overview" && (
 							<section
 								className="rounded-lg border p-6"
 								style={{
@@ -1161,7 +1206,7 @@ const [cameraReady, setCameraReady] = useState(false);
 						)}
 
 						{/* Quick Scan Tab */}
-						{activeTab === "unified-scanner" && (eventData.with_FaceId || eventData.with_RFID) && (
+						{effectiveActiveTab === "unified-scanner" && (eventData.with_FaceId || eventData.with_RFID) && (
 							<section
 								className="rounded-lg border p-6"
 								style={{
@@ -1172,9 +1217,15 @@ const [cameraReady, setCameraReady] = useState(false);
 								<div className="flex items-center justify-between mb-4">
 									<h2 className="text-lg font-semibold flex items-center gap-2" style={{ color: "var(--foreground)" }}>
 										<ShieldCheck size={20} />
-										{mode === "checkout" ? "RFID Check Out" : "Quick Attendance Scan"}
+										{mode === "checkout"
+											? eventData.with_FaceId && eventData.with_RFID
+												? "Face + RFID Check Out"
+												: eventData.with_FaceId
+													? "Face Check Out"
+													: "RFID Check Out"
+											: "Quick Attendance Scan"}
 									</h2>
-									{eventData.with_Geo && mode !== "checkout" && (
+									{eventData.with_Geo && (
 										<span
 											className="rounded-full px-3 py-1 text-xs font-semibold flex items-center gap-1.5"
 											style={{ backgroundColor: "rgba(16, 185, 129, 0.1)", color: "#10b981" }}
@@ -1186,12 +1237,148 @@ const [cameraReady, setCameraReady] = useState(false);
 
 								<p className="text-sm mb-4" style={{ color: "var(--text-muted)" }}>
 									{mode === "checkout"
-										? "Scan the participant's RFID card to check them out."
+										? eventData.with_FaceId
+											? "Use Face ID to check participants out. RFID remains available as a quick fallback."
+											: "Scan the participant's RFID card to check them out."
 										: "Face recognition runs automatically. Use RFID as quick fallback."}
 								</p>
 
 								{mode === "checkout" ? (
 									<div className="grid gap-4 md:grid-cols-2">
+										{eventData.with_FaceId && (
+											<div
+												className="rounded-xl border p-4"
+												style={{ borderColor: "rgba(59, 130, 246, 0.3)" }}
+											>
+												<div className="flex items-center gap-2 mb-3">
+													<Camera size={18} style={{ color: "#3b82f6" }} />
+													<h3 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+														Face Check Out
+													</h3>
+													<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(59, 130, 246, 0.15)", color: "#3b82f6" }}>
+														AUTO
+													</span>
+												</div>
+
+												{cameraError ? (
+													<div className="flex items-center justify-center rounded-lg bg-red-500/10 border border-red-500/30 p-4 mb-3" style={{ aspectRatio: "4/3" }}>
+														<div className="text-center">
+															<XCircle size={32} style={{ color: "#ef4444", margin: "0 auto" }} />
+															<p className="text-xs text-red-400 mt-2">{cameraError}</p>
+														</div>
+													</div>
+												) : (
+													<div className={`relative rounded-lg mb-3 border-2 transition-all ${
+														scanStatus === "scanning" ? "border-yellow-400" :
+														scanStatus === "verified" ? "border-emerald-400" :
+														scanStatus === "rejected" ? "border-red-400" :
+														"border-blue-400/50"
+													}`} style={{ aspectRatio: "4/3" }}>
+														<video
+															ref={videoRef}
+															autoPlay
+															playsInline
+															muted
+															className="w-full h-full rounded-lg object-cover"
+															style={{ backgroundColor: "#000" }}
+														/>
+														<canvas ref={canvasRef} style={{ display: "none" }} />
+
+														<div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 flex items-center justify-center gap-2">
+															{scanStatus === "scanning" && <div className="h-2.5 w-2.5 animate-ping rounded-full bg-yellow-400" />}
+															{scanStatus === "verified" && <CheckCircle size={14} style={{ color: "#10b981" }} />}
+															{scanStatus === "rejected" && <XCircle size={14} style={{ color: "#ef4444" }} />}
+															<span className="text-xs font-semibold" style={{
+																color: scanStatus === "scanning" ? "#fbbf24" :
+																		scanStatus === "verified" ? "#10b981" :
+																		scanStatus === "rejected" ? "#ef4444" :
+																		"#9ca3af"
+															}}>
+																{scanStatus === "idle" ? "Ready" :
+																	scanStatus === "scanning" ? "Analyzing..." :
+																	scanStatus === "verified" ? "Face Check-out Matched" :
+																	scanStatus === "rejected" ? "Not Recognized" :
+																	""}
+															</span>
+														</div>
+
+														{!cameraReady && (
+															<div className="absolute inset-0 flex items-center justify-center bg-black/70 rounded-lg">
+																<p className="text-sm text-slate-400">Initializing camera...</p>
+															</div>
+														)}
+													</div>
+												)}
+
+												{scanResult && scanStatus !== "idle" && scanStatus !== "scanning" && (
+													<div className={`rounded-lg p-3 mb-3 text-xs ${
+														scanStatus === "verified"
+															? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-300"
+															: scanStatus === "already_done"
+															? "bg-slate-500/10 border border-slate-500/30 text-slate-300"
+															: "bg-red-500/10 border border-red-500/30 text-red-300"
+													}`}>
+														{scanStatus === "verified" && (
+															<div className="flex items-center gap-2">
+																<CheckCircle size={14} />
+																<span>✓ {scanResult.name} checked out</span>
+															</div>
+														)}
+														{scanStatus === "already_done" && (
+															<div className="flex items-center gap-2">
+																<CheckCircle size={14} />
+																<span>{scanResult.name} has no active check-in to close</span>
+															</div>
+														)}
+														{scanStatus === "rejected" && (
+															<div className="flex items-center gap-2">
+																<XCircle size={14} />
+																<span>Face not recognized (${(scanResult.similarity * 100).toFixed(0)}%)</span>
+															</div>
+														)}
+													</div>
+												)}
+
+												<div className="flex items-center justify-between text-xs mt-2">
+													<span style={{ color: cameraReady ? (isScanning ? "#10b981" : "#f59e0b") : "var(--text-muted)" }}>
+														{!cameraReady
+															? "Starting camera..."
+															: isScanning
+																? "Scanning active"
+																: "Camera ready. Press Start"}
+													</span>
+													{cameraReady && (
+														<div className="flex items-center gap-2">
+															{!isScanning ? (
+																<button
+																	onClick={() => setIsScanning(true)}
+																	className="px-3 py-1.5 rounded-full text-xs font-semibold transition hover:brightness-110"
+																	style={{
+																		backgroundColor: "rgba(16, 185, 129, 0.15)",
+																		color: "#10b981",
+																		border: "1px solid rgba(16, 185, 129, 0.3)",
+																	}}
+																>
+																	Start
+																</button>
+															) : (
+																<button
+																	onClick={() => { setIsScanning(false); setScanStatus("idle"); }}
+																	className="px-3 py-1.5 rounded-full text-xs font-semibold transition hover:brightness-110"
+																	style={{
+																		backgroundColor: "rgba(239, 68, 68, 0.15)",
+																		color: "#ef4444",
+																		border: "1px solid rgba(239, 68, 68, 0.3)",
+																	}}
+																>
+																	Stop
+																</button>
+															)}
+														</div>
+													)}
+												</div>
+											</div>
+										)}
 										{eventData.with_RFID && (
 											<div
 												className="rounded-xl border p-4"
@@ -1203,7 +1390,7 @@ const [cameraReady, setCameraReady] = useState(false);
 														RFID Check Out
 													</h3>
 													<span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(16, 185, 129, 0.15)", color: "#10b981" }}>
-														REQUIRED
+														{eventData.with_FaceId ? "FALLBACK" : "REQUIRED"}
 													</span>
 												</div>
 												{scanResult && (
@@ -1225,7 +1412,7 @@ const [cameraReady, setCameraReady] = useState(false);
 													ref={rfidInput}
 													onKeyPress={handleRFIDScan}
 													placeholder="Scan RFID card here or type..."
-													autoFocus
+													autoFocus={!eventData.with_FaceId}
 												className="w-full rounded-lg border px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2"
 													style={{
 														backgroundColor: "var(--page-bg)",
@@ -1449,7 +1636,7 @@ const [cameraReady, setCameraReady] = useState(false);
 						)}
 
 						{/* Registered Tab */}
-						{activeTab === "registered" && (
+						{effectiveActiveTab === "registered" && (
 							<section
 								className="rounded-lg border overflow-hidden"
 								style={{
@@ -1567,7 +1754,7 @@ const [cameraReady, setCameraReady] = useState(false);
 						)}
 
 						{/* Attendees Tab */}
-						{activeTab === "attendance" && (
+						{effectiveActiveTab === "attendance" && (
 							<section
 								className="rounded-lg border overflow-hidden"
 								style={{
@@ -1691,7 +1878,7 @@ const [cameraReady, setCameraReady] = useState(false);
 						)}
 
 						{/* Analytics Tab */}
-						{activeTab === "analytics" && (
+						{effectiveActiveTab === "analytics" && (
 							<section
 								className="rounded-lg border p-6"
 								style={{
@@ -1761,7 +1948,7 @@ const [cameraReady, setCameraReady] = useState(false);
 						)}
 
 						{/* Geofence Tab */}
-						{activeTab === "geofence" && eventData?.with_Geo && (
+						{effectiveActiveTab === "geofence" && eventData?.with_Geo && (
 							<section
 								className="rounded-lg border p-6"
 								style={{
