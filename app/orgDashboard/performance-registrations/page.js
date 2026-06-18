@@ -357,6 +357,10 @@ export default function PerformanceRegistrationsPage() {
 		map[String(item.participantId)] = item;
 		return map;
 	}, {});
+	const assignmentByParticipant = (clusteringInsights?.participantAssignments || []).reduce((map, item) => {
+		map[String(item.participantId)] = item;
+		return map;
+	}, {});
 
 	if (!isAuthorized) return null;
 
@@ -656,13 +660,26 @@ export default function PerformanceRegistrationsPage() {
 														const cluster = clusterByParticipant[String(reg.participantId)];
 														const silhouette = silhouetteByParticipant[String(reg.participantId)]?.silhouetteScore;
 														const silhouetteColor = getSilhouetteColor(silhouette);
+														const assignment = assignmentByParticipant[String(reg.participantId)];
+														const features = assignment?.features || {};
 
 														return (
-															<div className="mt-4 grid gap-3 sm:grid-cols-3">
-																<MetricBadge label="Performance Cluster" value={cluster?.label || "Not assigned"} color={cluster?.label === "High Performers" ? "#10b981" : cluster?.label === "Moderate Performers" ? "#eab308" : cluster?.label === "Low Performers" ? "#ef4444" : "#6b7280"} />
-																<MetricBadge label="Silhouette Score" value={formatSilhouetteScore(silhouette)} color={silhouetteColor} />
-																<MetricBadge label="Cluster Fit" value={getSilhouetteMeaning(silhouette).split(":")[0]} color={silhouetteColor} />
-															</div>
+															<>
+																<div className="mt-4 grid gap-3 sm:grid-cols-3">
+																	<MetricBadge label="Performance Cluster" value={cluster?.label || "Not assigned"} color={cluster?.label === "High Performers" ? "#10b981" : cluster?.label === "Moderate Performers" ? "#eab308" : cluster?.label === "Low Performers" ? "#ef4444" : "#6b7280"} />
+																	<MetricBadge label="Silhouette Score" value={formatSilhouetteScore(silhouette)} color={silhouetteColor} />
+																	<MetricBadge label="Cluster Fit" value={getSilhouetteMeaning(silhouette).split(":")[0]} color={silhouetteColor} />
+																</div>
+
+																<div className="mt-3 grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+																	<MetricBadge label="Registered Events" value={features.registered_event_count ?? 0} color="#3b82f6" />
+																	<MetricBadge label="Attended Events" value={features.event_count ?? 0} color="#10b981" />
+																	<MetricBadge label="Missed Check-ins" value={features.missed_check_in_count ?? 0} color={(features.missed_check_in_count ?? 0) > 0 ? "#ef4444" : "#10b981"} />
+																	<MetricBadge label="Check-ins" value={features.check_in_count ?? 0} color="#3b82f6" />
+																	<MetricBadge label="Check-outs" value={features.check_out_count ?? 0} color="#8b5cf6" />
+																	<MetricBadge label="Avg Similarity" value={`${((features.avg_similarity ?? 0) * 100).toFixed(0)}%`} color={features.avg_similarity >= 0.7 ? "#10b981" : features.avg_similarity >= 0.4 ? "#eab308" : "#ef4444"} />
+																</div>
+															</>
 														);
 													})()}
 

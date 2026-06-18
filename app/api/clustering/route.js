@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { kmeans } from "ml-kmeans";
 
 const FEATURE_KEYS = [
+  "registered_event_count",
+  "missed_check_in_count",
   "event_count",
   "check_in_count",
   "check_out_count",
@@ -279,6 +281,8 @@ function extractMlFeatures(participants, attendanceRecords, options = {}) {
       };
       const registeredEventIds = registeredEventIdsByParticipant.get(participantId) || new Set();
       const attendance = groupedAttendance.get(participantId) || createZeroAttendanceBucket();
+      const registeredEventCount = registeredEventIds.size;
+      const missedCheckInCount = Math.max(registeredEventCount - attendance.checkInCount, 0);
       const hasAttendanceSignal = Boolean(
         attendance.eventIds.size ||
         attendance.checkInCount ||
@@ -295,7 +299,8 @@ function extractMlFeatures(participants, attendanceRecords, options = {}) {
       return {
         participantId,
         participantName: info.participantName,
-        registered_event_count: registeredEventIds.size,
+        registered_event_count: registeredEventCount,
+        missed_check_in_count: missedCheckInCount,
         attendance_event_count: attendance.eventIds.size,
         event_count: attendance.eventIds.size,
         check_in_count: attendance.checkInCount,
@@ -366,15 +371,15 @@ function calculateDataDensityMetrics(features) {
 }
 
 function selectClusteringStrategy(densityMetrics) {
-  if (densityMetrics.signalScore < COLD_START_THRESHOLD) {
+  if (densityMetrics.totalParticipants <= 0) {
     return {
       name: "cold_start",
       status: "cold_start",
       clusterCount: 0,
-      confidence: densityMetrics.signalScore,
+      confidence: 0,
       augmentWithSyntheticPriors: false,
-      reason: "insufficient_joined_event_data",
-      description: "Not enough attendance signal yet for reliable clustering.",
+      reason: "no_participant_data",
+      description: "No participants are available for clustering.",
     };
   }
 
@@ -506,6 +511,38 @@ function groupAssignments(assignments) {
   return clusterGroups;
 }
 
+function calculateClusterAttendanceScore(features) {
+  if (!features.length) return 0;
+  const centroid = FEATURE_KEYS.reduce((acc, key) => {
+    acc[key] = average(features.map((feature) => feature[key]));
+    return acc;
+  }, {});
+
+  const registeredEvents = centroid.registered_event_count;
+  const attendedEvents = centroid.event_count;
+  const missedCheckIns = centroid.missed_check_in_count;
+  const checkIns = centroid.check_in_count;
+  const checkOuts = centroid.check_out_count;
+  const verified = centroid.verified_count;
+  const avgSimilarity = centroid.avg_similarity;
+  const durationFactor = Math.min(centroid.avg_duration_minutes / 120, 1);
+
+  if (registeredEvents > 0) {
+    const attendanceRate = attendedEvents / registeredEvents;
+    const checkInRate = checkIns / registeredEvents;
+    const checkOutRate = checkOuts / registeredEvents;
+    const verificationRate = verified / registeredEvents;
+    const missedRate = missedCheckIns / registeredEvents;
+    const attendanceComponent = (attendanceRate * 0.35) + (checkInRate * 0.15) + (checkOutRate * 0.10) + (verificationRate * 0.10);
+    const qualityComponent = (avgSimilarity * 0.20) + (durationFactor * 0.10);
+    const missedPenalty = missedRate * 0.15;
+    return clamp(attendanceComponent + qualityComponent - missedPenalty, 0, 1);
+  }
+
+  const rawPositiveSignal = attendedEvents + checkIns + checkOuts + verified + avgSimilarity + durationFactor;
+  return clamp(rawPositiveSignal / Math.max(missedCheckIns + attendedEvents + checkIns + checkOuts + verified + 1, 1), 0, 1);
+}
+
 function buildClusters(clusterGroups, features, silhouetteScores) {
   const clusters = Array.from(clusterGroups.entries()).map(([clusterId, memberIndexes]) => {
     const memberFeatures = memberIndexes.map((index) => features[index]);
@@ -519,7 +556,7 @@ function buildClusters(clusterGroups, features, silhouetteScores) {
     return {
       clusterId,
       label: `Cluster ${clusterId + 1}`,
-      performanceScore: Math.round(clamp(clusterFitScore, 0, 1) * 100),
+      performanceScore: Math.round(calculateClusterAttendanceScore(memberFeatures) * 100),
       averageSilhouetteScore: Number(clusterFitScore.toFixed(4)),
       memberIds: memberFeatures.map((feature) => feature.participantId),
       memberNames: memberFeatures.map((feature) => feature.participantName),
@@ -532,8 +569,18 @@ function buildClusters(clusterGroups, features, silhouetteScores) {
     .map((cluster, index) => ({
       ...cluster,
       clusterId: index,
-      label: CLUSTER_LABELS[index] || `Cluster ${index + 1}`,
+      label: getClusterLabel(cluster, index, clusters.length),
     }));
+}
+
+function getClusterLabel(cluster, clusterIndex, totalClusters) {
+  if (totalClusters === 1) {
+    if (cluster.performanceScore >= 70) return "High Performers";
+    if (cluster.performanceScore < 40) return "Low Performers";
+    return "Moderate Performers";
+  }
+
+  return CLUSTER_LABELS[clusterIndex] || `Cluster ${clusterIndex + 1}`;
 }
 
 function buildSummary(clusters) {

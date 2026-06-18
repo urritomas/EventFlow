@@ -948,7 +948,9 @@ export default function PersonalDashboard() {
 
 									{/* Individual result */}
 									{(() => {
-										const myCluster = clusteringInsights.clusterAssignment || clusteringInsights.clusters?.find((cluster) => cluster.memberIds?.includes(participantId));
+										const myAssignment = clusteringInsights.clusterAssignment || clusteringInsights.participantAssignments?.find((assignment) => Number(assignment.participantId) === Number(participantId));
+										const myCluster = myAssignment || clusteringInsights.clusters?.find((cluster) => cluster.memberIds?.includes(participantId));
+										const myFeatures = myAssignment?.features || myCluster?.centroid || {};
 										if (!myCluster) {
 											return (
 												<div className="rounded-lg border p-6" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}>
@@ -960,7 +962,7 @@ export default function PersonalDashboard() {
 										}
 
 										const scoreColor = myCluster.performanceScore >= 70 ? "#10b981" : myCluster.performanceScore >= 40 ? "#eab308" : "#ef4444";
-										const silhouetteScore = myCluster.silhouetteScore ?? clusteringInsights.silhouetteScores?.find((item) => Number(item.participantId) === Number(participantId))?.silhouetteScore;
+										const silhouetteScore = myAssignment?.silhouetteScore ?? myCluster.silhouetteScore ?? clusteringInsights.silhouetteScores?.find((item) => Number(item.participantId) === Number(participantId))?.silhouetteScore;
 										const silhouetteColor = getSilhouetteColor(silhouetteScore);
 
 										return (
@@ -997,22 +999,30 @@ export default function PersonalDashboard() {
 														</span>
 													</div>
 												</div>
-												<div className="grid gap-3 sm:grid-cols-2">
+												<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Attendance</p>
-														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{((myCluster.centroid?.attendance_rate ?? 0) * 100).toFixed(0)}%</p>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Registered Events</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{myFeatures.registered_event_count ?? 0}</p>
 													</div>
 													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Similarity</p>
-														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{((myCluster.centroid?.avg_similarity ?? 0) * 100).toFixed(0)}%</p>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Attended Events</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{myFeatures.event_count ?? 0}</p>
 													</div>
 													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Punctuality</p>
-														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{((myCluster.centroid?.punctuality_score ?? 0) * 100).toFixed(0)}%</p>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Missed Check-ins</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{myFeatures.missed_check_in_count ?? 0}</p>
 													</div>
 													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
-														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Engagement</p>
-														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{((myCluster.centroid?.engagement_score ?? 0) * 100).toFixed(0)}%</p>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Check-ins</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{myFeatures.check_in_count ?? 0}</p>
+													</div>
+													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Check-outs</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{myFeatures.check_out_count ?? 0}</p>
+													</div>
+													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+														<p className="text-xs" style={{ color: "var(--text-muted)" }}>Avg Similarity</p>
+														<p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{((myFeatures.avg_similarity ?? 0) * 100).toFixed(0)}%</p>
 													</div>
 												</div>
 											</div>
