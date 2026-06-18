@@ -722,10 +722,32 @@ export default function PersonalDashboard() {
 			setClusteringInsights(data);
 		} catch (err) {
 			console.error("Error fetching clustering insights:", err);
-			setClusteringError(err instanceof Error ? err.message : "Unknown error occurred");
+			const message = err instanceof Error ? err.message : typeof err === "object" && err && "message" in err ? String(err.message) : String(err || "Unknown error occurred");
+			setClusteringError(message);
 		} finally {
 			setClusteringLoading(false);
 		}
+	};
+
+	const formatSilhouetteScore = (score) => {
+		if (score == null) return "N/A";
+		return Number(score).toFixed(2);
+	};
+
+	const getSilhouetteColor = (score) => {
+		if (score == null) return "#6b7280";
+		if (score >= 0.65) return "#10b981";
+		if (score >= 0.25) return "#3b82f6";
+		if (score >= -0.25) return "#eab308";
+		return "#ef4444";
+	};
+
+	const getSilhouetteMeaning = (score) => {
+		if (score == null) return "Not enough data to calculate silhouette score";
+		if (score >= 0.65) return "Close to 1: well-matched and clearly separated";
+		if (score >= 0.25) return "Positive separation from nearby clusters";
+		if (score >= -0.25) return "Close to 0: near the boundary between clusters";
+		return "Close to -1: may be assigned to the wrong cluster";
 	};
 
 	useEffect(() => {
@@ -846,14 +868,32 @@ export default function PersonalDashboard() {
 								<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
 									Performance Group
 								</h2>
-								<button
-									onClick={fetchClusteringInsights}
-									disabled={clusteringLoading}
-									className="rounded-lg px-3 py-1.5 text-xs font-semibold transition hover:opacity-90 disabled:opacity-60"
-									style={{ backgroundColor: "rgba(59, 130, 246, 0.15)", color: "#3b82f6" }}
-								>
-									{clusteringLoading ? "Analyzing..." : "Re-run Analysis"}
-								</button>
+								<div className="flex items-center gap-2">
+									{clusteringInsights && (
+										<>
+											<span
+												className="rounded-full px-2.5 py-1 text-xs font-semibold"
+												style={{
+													backgroundColor: clusteringInsights.status === "ready" ? "rgba(16, 185, 129, 0.15)" : clusteringInsights.status === "low_confidence" ? "rgba(234, 179, 8, 0.15)" : "rgba(107, 114, 128, 0.15)",
+													color: clusteringInsights.status === "ready" ? "#10b981" : clusteringInsights.status === "low_confidence" ? "#eab308" : "#6b7280",
+												}}
+											>
+												{clusteringInsights.status === "ready" ? "Ready" : clusteringInsights.status === "low_confidence" ? "Low Confidence" : "Cold Start"}
+											</span>
+											<span className="text-xs" style={{ color: "var(--text-muted)" }}>
+												Confidence: {Math.round((clusteringInsights.confidence ?? 0) * 100)}%
+											</span>
+										</>
+									)}
+									<button
+										onClick={fetchClusteringInsights}
+										disabled={clusteringLoading}
+										className="rounded-lg px-3 py-1.5 text-xs font-semibold transition hover:opacity-90 disabled:opacity-60"
+										style={{ backgroundColor: "rgba(59, 130, 246, 0.15)", color: "#3b82f6" }}
+									>
+										{clusteringLoading ? "Analyzing..." : "Re-run Analysis"}
+									</button>
+								</div>
 							</div>
 							{clusteringLoading && !clusteringInsights ? (
 								<div
@@ -920,6 +960,8 @@ export default function PersonalDashboard() {
 										}
 
 										const scoreColor = myCluster.performanceScore >= 70 ? "#10b981" : myCluster.performanceScore >= 40 ? "#eab308" : "#ef4444";
+										const silhouetteScore = myCluster.silhouetteScore ?? clusteringInsights.silhouetteScores?.find((item) => Number(item.participantId) === Number(participantId))?.silhouetteScore;
+										const silhouetteColor = getSilhouetteColor(silhouetteScore);
 
 										return (
 											<div className="rounded-lg border p-6" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}>
@@ -940,6 +982,20 @@ export default function PersonalDashboard() {
 														className="h-2 rounded-full"
 														style={{ width: `${Math.min(myCluster.performanceScore, 100)}%`, backgroundColor: scoreColor }}
 													/>
+												</div>
+												<div className="mb-4 rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>
+													<div className="flex items-center justify-between gap-3">
+														<div>
+															<p className="text-xs font-semibold" style={{ color: "var(--text-muted)" }}>Silhouette Score</p>
+															<p className="text-sm" style={{ color: "var(--text-muted)" }}>{getSilhouetteMeaning(silhouetteScore)}</p>
+														</div>
+														<span
+															className="rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap"
+															style={{ backgroundColor: silhouetteColor + '20', color: silhouetteColor }}
+														>
+															{formatSilhouetteScore(silhouetteScore)}
+														</span>
+													</div>
 												</div>
 												<div className="grid gap-3 sm:grid-cols-2">
 													<div className="rounded-lg border p-4" style={{ borderColor: "var(--border-subtle)" }}>

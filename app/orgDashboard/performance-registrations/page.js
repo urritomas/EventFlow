@@ -157,6 +157,8 @@ export default function PerformanceRegistrationsPage() {
 	const [actionLoading, setActionLoading] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [filterStatus, setFilterStatus] = useState("all");
+	const [clusteringInsights, setClusteringInsights] = useState(null);
+	const [clusteringError, setClusteringError] = useState(null);
 
 	useEffect(() => {
 		const isLoggedIn = localStorage.getItem("isLoggedIn");
@@ -226,6 +228,49 @@ export default function PerformanceRegistrationsPage() {
 		}
 	};
 
+	const loadClustering = async () => {
+		if (!selectedEventId) return;
+		setClusteringError(null);
+
+		try {
+			const res = await fetch(`/api/clustering?eventId=${encodeURIComponent(selectedEventId)}`);
+			const data = await res.json().catch(() => ({}));
+
+			if (!res.ok) {
+				throw new Error(data?.error || data?.details || "Failed to load clustering");
+			}
+
+			setClusteringInsights(data);
+			setClusteringError(null);
+		} catch (error) {
+			console.error("Error loading clustering:", error);
+			setClusteringInsights(null);
+			const message = error instanceof Error ? error.message : typeof error === "object" && error && "message" in error ? String(error.message) : String(error || "Unknown error occurred");
+			setClusteringError(message);
+		}
+	};
+
+	const formatSilhouetteScore = (score) => {
+		if (score == null) return "N/A";
+		return Number(score).toFixed(2);
+	};
+
+	const getSilhouetteColor = (score) => {
+		if (score == null) return "#6b7280";
+		if (score >= 0.65) return "#10b981";
+		if (score >= 0.25) return "#3b82f6";
+		if (score >= -0.25) return "#eab308";
+		return "#ef4444";
+	};
+
+	const getSilhouetteMeaning = (score) => {
+		if (score == null) return "Not enough data to calculate silhouette score";
+		if (score >= 0.65) return "Close to 1: well-matched and clearly separated";
+		if (score >= 0.25) return "Positive separation from nearby clusters";
+		if (score >= -0.25) return "Close to 0: near the boundary between clusters";
+		return "Close to -1: may be assigned to the wrong cluster";
+	};
+
 	useEffect(() => {
 		if (isAuthorized) {
 			loadEvents();
@@ -235,6 +280,7 @@ export default function PerformanceRegistrationsPage() {
 	useEffect(() => {
 		if (selectedEventId) {
 			loadRegistrations();
+			loadClustering();
 		}
 	}, [selectedEventId]);
 
@@ -301,6 +347,16 @@ export default function PerformanceRegistrationsPage() {
 	const pendingCount = registrations.filter((r) => r.reviewStatus === "pending").length;
 	const acceptedCount = registrations.filter((r) => r.reviewStatus === "accepted").length;
 	const declinedCount = registrations.filter((r) => r.reviewStatus === "declined").length;
+	const clusterByParticipant = (clusteringInsights?.clusters || []).reduce((map, cluster) => {
+		(cluster.memberIds || []).forEach((participantId) => {
+			map[String(participantId)] = cluster;
+		});
+		return map;
+	}, {});
+	const silhouetteByParticipant = (clusteringInsights?.silhouetteScores || []).reduce((map, item) => {
+		map[String(item.participantId)] = item;
+		return map;
+	}, {});
 
 	if (!isAuthorized) return null;
 
@@ -442,6 +498,54 @@ export default function PerformanceRegistrationsPage() {
 									</div>
 								</div>
 
+								{/* Clustering Summary */}
+								<div className="grid gap-4 sm:grid-cols-4 mb-6">
+									<div className="rounded-lg border p-4" style={{ backgroundColor: "var(--surface)", borderColor: "var(--border-subtle)" }}>
+										<p className="text-xs" style={{ color: "var(--text-muted)" }}>Analyzed Participants</p>
+										<p className="text-2xl font-bold" style={{ color: "var(--foreground)" }}>{clusteringInsights?.totalParticipants ?? 0}</p>
+									</div>
+									<div className="rounded-lg border p-4" style={{ backgroundColor: "var(--surface)", borderColor: "rgba(16, 185, 129, 0.25)" }}>
+										<p className="text-xs" style={{ color: "var(--text-muted)" }}>High Performers</p>
+										<p className="text-2xl font-bold" style={{ color: "#10b981" }}>{clusteringInsights?.summary?.high_performers ?? 0}</p>
+									</div>
+									<div className="rounded-lg border p-4" style={{ backgroundColor: "var(--surface)", borderColor: "rgba(234, 179, 8, 0.25)" }}>
+										<p className="text-xs" style={{ color: "var(--text-muted)" }}>Moderate Performers</p>
+										<p className="text-2xl font-bold" style={{ color: "#eab308" }}>{clusteringInsights?.summary?.moderate_performers ?? 0}</p>
+									</div>
+									<div className="rounded-lg border p-4" style={{ backgroundColor: "var(--surface)", borderColor: clusteringInsights?.status === "cold_start" ? "rgba(107, 114, 128, 0.25)" : "rgba(239, 68, 68, 0.25)" }}>
+										<p className="text-xs" style={{ color: "var(--text-muted)" }}>Low Performers</p>
+										<p className="text-2xl font-bold" style={{ color: clusteringInsights?.status === "cold_start" ? "#6b7280" : "#ef4444" }}>{clusteringInsights?.status === "cold_start" ? "N/A" : clusteringInsights?.summary?.low_performers ?? 0}</p>
+									</div>
+								</div>
+
+								{clusteringInsights && (
+									<div className="flex items-center gap-3 mb-6">
+										<span
+											className="rounded-full px-3 py-1 text-xs font-semibold"
+											style={{
+												backgroundColor: clusteringInsights.status === "ready" ? "rgba(16, 185, 129, 0.15)" : clusteringInsights.status === "low_confidence" ? "rgba(234, 179, 8, 0.15)" : "rgba(107, 114, 128, 0.15)",
+												color: clusteringInsights.status === "ready" ? "#10b981" : clusteringInsights.status === "low_confidence" ? "#eab308" : "#6b7280",
+											}}
+										>
+											{clusteringInsights.status === "ready" ? "Ready" : clusteringInsights.status === "low_confidence" ? "Low Confidence" : "Cold Start"}
+										</span>
+										<span className="text-sm" style={{ color: "var(--text-muted)" }}>
+											Confidence: {Math.round((clusteringInsights.confidence ?? 0) * 100)}%
+										</span>
+										{clusteringInsights.strategy?.reason && (
+											<span className="text-sm" style={{ color: "var(--text-muted)" }}>
+												Reason: {clusteringInsights.strategy.reason.replace(/_/g, " ")}
+											</span>
+										)}
+									</div>
+								)}
+
+								{clusteringError && (
+									<div className="rounded-lg border p-4 mb-6 text-sm" style={{ backgroundColor: "rgba(239, 68, 68, 0.08)", borderColor: "rgba(239, 68, 68, 0.3)", color: "#ef4444" }}>
+										Clustering could not be loaded: {clusteringError}
+									</div>
+								)}
+
 								{/* Filters */}
 								<div className="flex flex-col sm:flex-row gap-3 mb-6">
 									<div className="relative flex-1">
@@ -547,6 +651,20 @@ export default function PerformanceRegistrationsPage() {
 															{isPending ? "Pending Review" : isAccepted ? "Accepted" : "Declined"}
 														</span>
 													</div>
+
+													{(() => {
+														const cluster = clusterByParticipant[String(reg.participantId)];
+														const silhouette = silhouetteByParticipant[String(reg.participantId)]?.silhouetteScore;
+														const silhouetteColor = getSilhouetteColor(silhouette);
+
+														return (
+															<div className="mt-4 grid gap-3 sm:grid-cols-3">
+																<MetricBadge label="Performance Cluster" value={cluster?.label || "Not assigned"} color={cluster?.label === "High Performers" ? "#10b981" : cluster?.label === "Moderate Performers" ? "#eab308" : cluster?.label === "Low Performers" ? "#ef4444" : "#6b7280"} />
+																<MetricBadge label="Silhouette Score" value={formatSilhouetteScore(silhouette)} color={silhouetteColor} />
+																<MetricBadge label="Cluster Fit" value={getSilhouetteMeaning(silhouette).split(":")[0]} color={silhouetteColor} />
+															</div>
+														);
+													})()}
 
 													{/* Performance Metrics */}
 													{reg.metrics && (
