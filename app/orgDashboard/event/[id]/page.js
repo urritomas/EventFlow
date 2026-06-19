@@ -195,41 +195,81 @@ const [cameraReady, setCameraReady] = useState(false);
 	};
 
 	const handleFaceCheckout = async ({ supabase, participantId, name, similarity }) => {
-		const openAttendance = await getOpenAttendance(supabase, participantId);
+  		const openAttendance = await getOpenAttendance(supabase, participantId);
 
-		if (!openAttendance) {
-			setScanStatus("already_done");
-			setScanResult({ success: true, name, message: `${name} has no active check-in to close.` });
-			return;
-		}
 
-		const geofenceOk = await verifyGeofence(name);
-		if (!geofenceOk) {
-			setScanStatus("idle");
-			return;
-		}
+  		if (!openAttendance) {
+    		setScanStatus("already_done");
+    		setScanResult({ success: true, name, message: `${name} has no active check-in to close.` });
+    		return;
+  		}
 
-		const { error: updateError } = await supabase
-			.from("attendance")
-			.update({
-				check_out_time: new Date().toISOString(),
-				check_out_verified: true,
-				check_out_method: "face",
-				check_out_similarity: Number.isFinite(similarity) ? similarity : null,
-			})
-			.eq("attendance_id", openAttendance.attendance_id);
 
-		if (updateError) {
-			setScanStatus("idle");
-			setScanResult({ success: false, message: "Check-out failed: " + updateError.message });
-			return;
-		}
+  		const geofenceOk = await verifyGeofence(name);
+  		if (!geofenceOk) {
+    		setScanStatus("idle");
+    		return;
+  		}
 
-		await refreshAttendance(supabase);
-		setPendingFaceParticipant(null);
-		setScanStatus("verified");
-		setScanResult({ success: true, name, message: `${name} checked out.` });
-	};
+
+  		const { error: updateError } = await supabase
+    		.from("attendance")
+    		.update({
+      		check_out_time: new Date().toISOString(),
+      		check_out_verified: true,
+      		check_out_method: "face",
+      		check_out_similarity: Number.isFinite(similarity) ? similarity : null,
+    		})
+    		.eq("attendance_id", openAttendance.attendance_id);
+
+
+  		if (updateError) {
+    		setScanStatus("idle");
+    		setScanResult({ success: false, message: "Check-out failed: " + updateError.message });
+    		return;
+  		}
+
+
+  		let checkoutMessage = `${name} checked out.`;
+
+
+  		try {
+    		const certResponse = await fetch("/api/certificates/issue", {
+      		method: "POST",
+      		headers: { "Content-Type": "application/json" },
+      		body: JSON.stringify({
+        		eventId,
+        		participantId,
+        		attendanceId: openAttendance.attendance_id,
+      		}),
+    		});
+
+
+    		const certResult = await certResponse.json().catch(() => ({}));
+    		console.log("[Face checkout] certResult:", JSON.stringify(certResult));
+    		console.log("[Face checkout] certResponse.ok:", certResponse.ok);
+
+
+    		if (certResponse.ok && certResult.issued && certResult.emailSent) {
+      		checkoutMessage = `${name} checked out. Certificate emailed to ${certResult.recipientEmail}.`;
+    		} else if (certResponse.ok && certResult.alreadySent) {
+      		checkoutMessage = `${name} checked out. Certificate was already sent.`;
+    		} else if (certResult.ineligible) {
+      		checkoutMessage = `${name} checked out. Not eligible for certificate: ${certResult.reason}`;
+    		} else if (certResult.details?.includes("BREVO")) {
+      		checkoutMessage = `${name} checked out. Eligible, but email failed — check Brevo configuration.`;
+    		}
+  		} catch (certError) {
+    		console.error("[Face checkout] Certificate issue error:", certError);
+    		checkoutMessage = `${name} checked out. Certificate could not be processed.`;
+  		}
+
+
+  		await refreshAttendance(supabase);
+  		setPendingFaceParticipant(null);
+  		setScanStatus("verified");
+  		setScanResult({ success: true, name, message: checkoutMessage });
+		};
 
 	const syncCheckedInStateFromAttendees = (attendanceRows) => {
 		const openCheckInIds = (attendanceRows || [])

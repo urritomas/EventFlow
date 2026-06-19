@@ -733,16 +733,6 @@ export default function OrgDashboard() {
 								<h2 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
 									Attendance Monitoring
 								</h2>
-								<button
-									onClick={() => router.push("/orgDashboard/attendance-scanner")}
-									className="rounded-lg px-4 py-2 font-semibold text-sm transition hover:opacity-90"
-									style={{
-										backgroundColor: "#3b82f6",
-										color: "white",
-									}}
-								>
-									Start Scanning
-								</button>
 							</div>
 							<div className="grid gap-4 md:grid-cols-3">
 								<div
