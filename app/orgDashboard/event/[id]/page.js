@@ -195,6 +195,17 @@ const [cameraReady, setCameraReady] = useState(false);
 		}
 	};
 
+	useEffect(() => {
+		if (!isAuthorized || !eventId || activeTab !== "attendance") return;
+
+		const loadAttendanceRecords = async () => {
+			const supabase = createClient();
+			await refreshAttendance(supabase);
+		};
+
+		loadAttendanceRecords();
+	}, [isAuthorized, eventId, activeTab]);
+
 	const handleFaceCheckout = async ({ supabase, participantId, name, similarity }) => {
   		const openAttendance = await getOpenAttendance(supabase, participantId);
 
