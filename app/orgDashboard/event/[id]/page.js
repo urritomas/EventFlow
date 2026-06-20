@@ -174,6 +174,7 @@ const [cameraReady, setCameraReady] = useState(false);
 			.select("attendance_id, verification_method, check_in_time, check_out_time")
 			.eq("event_id", eventId)
 			.eq("participant_id", participantId)
+			.not("check_in_time", "is", null)
 			.is("check_out_time", null)
 			.order("check_in_time", { ascending: false })
 			.limit(1);

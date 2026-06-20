@@ -844,4 +844,4 @@ export default function PerformanceRegistrationsPage() {
 			</div>
 		</div>
 	);
-}
+}  

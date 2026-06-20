@@ -91,6 +91,7 @@ export async function POST(req) {
       .select('attendance_id, check_in_time, verification_method')
       .eq('event_id', eventId)
       .eq('participant_id', participantId)
+      .not('check_in_time', 'is', null)
       .is('check_out_time', null)
       .maybeSingle();
 
@@ -195,6 +196,7 @@ export async function PUT(req) {
       .select('attendance_id, check_in_time, verification_method, participants(rfid)')
       .eq('event_id', eventId)
       .eq('participant_id', participantId)
+      .not('check_in_time', 'is', null)
       .is('check_out_time', null)
       .maybeSingle();
 
