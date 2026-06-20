@@ -180,7 +180,7 @@ export default function RegisterPage() {
 				const { data: existingEmailData, error: emailError } = await supabase
 					.from("login_details")
 					.select("login_id", { count: "exact" })
-					.eq("email_address", formState.orgEmail);
+					.eq("email_address", formState.orgEmail.trim().toLowerCase());
 
 				if (!emailError && existingEmailData && existingEmailData.length > 0) {
 					setSubmitMessage("This email is already registered. Please use a different email or login.");
@@ -267,7 +267,7 @@ export default function RegisterPage() {
 				const { data: existingEmailData, error: emailError } = await supabase
 					.from("login_details")
 					.select("login_id", { count: "exact" })
-					.eq("email_address", formState.personalEmail);
+					.eq("email_address", formState.personalEmail.trim().toLowerCase());
 
 				if (!emailError && existingEmailData && existingEmailData.length > 0) {
 					setSubmitMessage("This email is already registered. Please use a different email or login.");
@@ -296,7 +296,7 @@ export default function RegisterPage() {
 					.insert([
 						{
 							username: formState.personalUsername,
-							email_address: formState.personalEmail,
+							email_address: formState.personalEmail.trim().toLowerCase(),
 							hashed_password: hashedPassword,
 							first_name: formState.firstName,
 							last_name: formState.lastName || null,
